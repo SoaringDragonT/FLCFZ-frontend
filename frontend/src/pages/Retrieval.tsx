@@ -13,7 +13,7 @@ import {
   Square,
 } from 'lucide-react';
 import { search, fetchRetrievalMedia } from '../services/mockApi';
-import { userProfile } from '../data/mockData';
+import { getCurrentSession } from '../auth/session';
 import type { RetrievalResult, RetrievalIndexInfo } from '../data/mockData';
 import AlertBadge from '../components/AlertBadge';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
@@ -193,7 +193,7 @@ export default function Retrieval() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
           <Hash className="w-5 h-5 text-primary-600" />
           动态跨模态哈希检索
@@ -223,8 +223,8 @@ export default function Retrieval() {
             if (f) void pickAudioFile(f);
           }}
         />
-        <div className="flex gap-3">
-          <div className="relative flex-1">
+        <div className="flex flex-wrap gap-3">
+          <div className="relative min-w-40 flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
@@ -298,7 +298,7 @@ export default function Retrieval() {
           <button
             onClick={() => handleSearch()}
             disabled={loading || !canSearch}
-            className="px-6 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
+            className="px-6 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed inline-flex items-center gap-2"
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
             {loading ? '检索中...' : '开始检索'}
@@ -396,7 +396,7 @@ export default function Retrieval() {
       </div>
 
       {loading && (
-        <div className="bg-white rounded-xl border border-slate-200 p-12 shadow-sm flex flex-col items-center gap-4 text-slate-400">
+        <div className="ui-card p-12 flex flex-col items-center gap-4 text-slate-400">
           <Loader2 className="w-10 h-10 animate-spin text-primary-500" />
           <div className="text-center">
             <p className="text-sm font-medium text-slate-600">动态跨模态哈希检索中</p>
@@ -407,27 +407,44 @@ export default function Retrieval() {
 
       {!loading && results && (
         <>
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+          <div className="ui-card ">
             <div className="flex items-center justify-between p-5 border-b border-slate-100">
               <div>
                 <h3 className="font-semibold text-slate-800">
-                  检索结果 <span className="text-sm font-normal text-slate-400">（找到 {results.length} 个高相似模式）</span>
+                  检索结果{' '}
+                  <span className="text-sm font-normal text-slate-400">
+                    {results.length === 0
+                      ? '（没有找到相似模式：试试换一种描述，或把检索范围改成「全部模态」）'
+                      : `（找到 ${results.length} 个高相似模式）`}
+                  </span>
                 </h3>
                 {indexInfo && (
-                  <p className="text-xs text-slate-400 mt-1">
-                    查询模态 {modalityLabels[(indexInfo.query_modality ?? 'text') as keyof typeof modalityLabels] ?? '文本'}
-                    {indexInfo.query_media ? '（媒体文件）' : ''}
-                    {' · '}查询码 <span className="font-mono">{indexInfo.query_code_hex?.slice(0, 8)}…</span>
-                    {' · '}命中主题 {indexInfo.query_themes?.join('、') || '—'}
-                    {' · '}候选 {indexInfo.candidates}/{indexInfo.index_size}
-                    {' · '}探测桶 {indexInfo.keys_probed}
-                    {' · '}{indexInfo.scoring === 'asymmetric' ? '非对称距离' : '汉明距离'}排序
-                    {indexInfo.data_source && (
-                      <>
-                        {' · '}数据来源 {SOURCE_LABELS[indexInfo.data_source] ?? indexInfo.data_source}
-                      </>
-                    )}
-                  </p>
+                  <>
+                    {/* 主层：只留人能直接读懂的信息 */}
+                    <p className="text-xs text-slate-400 mt-1">
+                      查询模态 {modalityLabels[(indexInfo.query_modality ?? 'text') as keyof typeof modalityLabels] ?? '文本'}
+                      {indexInfo.query_media ? '（媒体文件）' : ''}
+                      {' · '}命中主题 {indexInfo.query_themes?.join('、') || '—'}
+                      {indexInfo.data_source && (
+                        <>
+                          {' · '}数据来源 {SOURCE_LABELS[indexInfo.data_source] ?? indexInfo.data_source}
+                        </>
+                      )}
+                    </p>
+                    {/* 技术细节默认折叠：原先这些字段与主层挤在同一行，
+                        等于把"跨模态哈希"这个核心卖点当成调试信息展示 */}
+                    <details className="mt-1">
+                      <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700">
+                        技术详情（哈希编码与索引过程）
+                      </summary>
+                      <p className="text-xs text-slate-400 mt-1">
+                        查询码 <span className="font-mono">{indexInfo.query_code_hex?.slice(0, 8)}…</span>
+                        {' · '}候选 <span className="tabular-nums">{indexInfo.candidates}/{indexInfo.index_size}</span>
+                        {' · '}探测桶 <span className="tabular-nums">{indexInfo.keys_probed}</span>
+                        {' · '}{indexInfo.scoring === 'asymmetric' ? '非对称距离' : '汉明距离'}排序
+                      </p>
+                    </details>
+                  </>
                 )}
                 {indexInfo?.dataset && (
                   <p className="text-xs text-slate-400 mt-0.5">
@@ -437,7 +454,7 @@ export default function Retrieval() {
               </div>
               <button
                 onClick={() => setShowReport((v) => !v)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-colors cursor-pointer"
+                className="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer"
               >
                 <Sparkles className="w-4 h-4" /> {showReport ? '收起报告' : 'RAG智能分析'}
               </button>
@@ -471,10 +488,21 @@ export default function Retrieval() {
                       <div className="flex items-center gap-3">
                         <AlertBadge level={result.alertLevel} size="sm" />
                         <div className="text-right">
-                          <p className="text-lg font-bold text-primary-600">
+                          <p className="text-lg font-bold text-primary-600 tabular-nums">
                             {(result.similarity * 100).toFixed(0)}%
                           </p>
-                          <p className="text-xs text-slate-400">相似度</p>
+                          {/* 把裸数字换成「人能读的档位 + 分数条」：
+                              >80% 高度相似 / >60% 较相似 / 其余关联较弱 */}
+                          <p className="text-xs text-slate-500">
+                            {result.similarity >= 0.8 ? '高度相似' : result.similarity >= 0.6 ? '较相似' : '关联较弱'}
+                          </p>
+                          <div className="mt-1 ml-auto h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
+                            <div
+                              className={`h-full rounded-full ${result.similarity >= 0.6 ? 'bg-primary-500' : 'bg-slate-300'}`}
+                              style={{ width: `${Math.round(result.similarity * 100)}%` }}
+                              aria-hidden="true"
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -574,7 +602,11 @@ export default function Retrieval() {
                         </p>
                       )}
                       {result.explain && (
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
+                        <details className="text-xs text-slate-400">
+                          <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700">
+                            技术细节（汉明距离 / 哈希码 / 时间窗）
+                          </summary>
+                          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
                           <span>
                             汉明距离{' '}
                             <span className="font-mono text-slate-500">
@@ -600,7 +632,8 @@ export default function Retrieval() {
                           {typeof result.explain.window === 'number' && (
                             <span>时间窗 {result.explain.window}</span>
                           )}
-                        </div>
+                          </div>
+                        </details>
                       )}
                     </div>
                   </div>
@@ -610,19 +643,19 @@ export default function Retrieval() {
           </div>
 
           {showReport && report && (
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
+            <div className="ui-card ">
               <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-primary-50 to-white rounded-t-xl">
                 <div className="flex items-center gap-3">
                   <Sparkles className="w-6 h-6 text-primary-600" />
                   <div>
                     <h3 className="font-semibold text-slate-800">RAG 智能分析报告</h3>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      用户：{userProfile.name}，综合 {results.length} 个相似模式与知识库生成
+                      用户：{getCurrentSession()?.username || '用户'}，综合 {results.length} 个相似模式与知识库生成
                     </p>
                   </div>
-                  <div className="ml-auto px-3 py-1 bg-danger-50 text-danger-600 rounded-full text-sm font-medium">
-                    高风险
-                  </div>
+                  {report.riskLevel && <div className="ml-auto px-3 py-1 bg-slate-100 text-slate-700 rounded-md text-sm font-medium">
+                    风险提示：{report.riskLevel}
+                  </div>}
                 </div>
               </div>
 

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ClipboardList, Clock, Sparkles, FileText, AlertTriangle } from 'lucide-react';
 import { type PersonalScreeningRecord, type WarningEvent, type PersonalTimelineEvent, type UserProfile } from '../data/mockData';
 import { getCases } from '../services/mockApi';
+import { getCurrentSession, getDisplayName } from '../auth/session';
 import AlertBadge from '../components/AlertBadge';
 
 export default function Cases() {
@@ -21,7 +22,16 @@ export default function Cases() {
         setScreeningRecords(data.screeningRecords ?? []);
         setWarningEvents(data.warningEvents ?? []);
         setPersonalTimeline(data.personalTimeline ?? []);
-        if (data.userProfile) setUserProfile(data.userProfile);
+        if (data.userProfile) {
+          // 个人端名称与登录时输入的用户名一致，避免演示资料中的姓名覆盖当前账号。
+          const signedInUsername = getCurrentSession()?.username;
+          const fallback = getDisplayName();
+          const name = data.userProfile.name;
+          setUserProfile({
+            ...data.userProfile,
+            name: signedInUsername || fallback || name || '—',
+          });
+        }
       } catch (e) {
         console.error('加载档案失败', e);
       } finally {
@@ -30,23 +40,41 @@ export default function Cases() {
     })();
   }, []);
 
+  // 副标题只拼有值的字段：此前会把空字段也连起来，渲染成「名字 ·  · 0 岁 ·  ·」，
+  // 而 age 的 0 是「未知」不是真的 0 岁。宁可少显示，也不要显示假的。
+  const profileMeta = [
+    userProfile.name,
+    userProfile.gender,
+    userProfile.age ? `${userProfile.age} 岁` : '',
+    userProfile.stage,
+    userProfile.major,
+  ]
+    .map((v) => (v || '').toString().trim())
+    .filter(Boolean)
+    .join(' · ');
+
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h2 className="text-xl font-semibold text-slate-800">我的心理档案</h2>
-        <p className="text-sm text-slate-500 mt-1">
-          {userProfile.name} · {userProfile.gender} · {userProfile.age} 岁 · {userProfile.stage} · {userProfile.major}
+        <p className="text-sm text-slate-500 mt-1">{profileMeta}</p>
+        <p className="text-xs text-slate-400 mt-2">
+          紧急支持联系人：{userProfile.emergencyContact || '未填写'}
         </p>
-        <p className="text-xs text-slate-400 mt-2">紧急支持联系人：{userProfile.emergencyContact}</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+        <div className="ui-card p-5">
           <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
             <ClipboardList className="w-5 h-5 text-primary-600" />
             最近筛查
           </h3>
           <div className="space-y-2">
+            {screeningRecords.length === 0 && (
+              <p className="rounded-lg bg-slate-50 px-3 py-6 text-center text-sm text-slate-400">
+                还没有筛查记录。完成一次心理筛查后，最近的结果会显示在这里。
+              </p>
+            )}
             {screeningRecords.slice(0, 4).map((item) => (
               <div key={item.id} className="p-3 bg-slate-50 rounded-lg">
                 <div className="flex items-center justify-between">
@@ -59,12 +87,17 @@ export default function Cases() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+        <div className="ui-card p-5">
           <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-danger-500" />
             预警记录
           </h3>
           <div className="space-y-2">
+            {warningEvents.length === 0 && (
+              <p className="rounded-lg bg-slate-50 px-3 py-6 text-center text-sm text-slate-400">
+                目前没有预警记录。当情绪、压力或睡眠出现持续变化时，系统会在这里提醒你。
+              </p>
+            )}
             {warningEvents.map((item) => (
               <div key={item.id} className="p-3 bg-slate-50 rounded-lg">
                 <div className="flex items-center justify-between">
@@ -77,7 +110,7 @@ export default function Cases() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+        <div className="ui-card p-5">
           <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-primary-600" />
             档案摘要
@@ -90,13 +123,18 @@ export default function Cases() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
           <Clock className="w-5 h-5 text-primary-600" />
           关键时间线
         </h3>
         <div className="relative pl-6 space-y-5">
           <div className="absolute left-2.5 top-2 bottom-2 w-px bg-slate-200" />
+          {personalTimeline.length === 0 && (
+            <p className="rounded-lg bg-slate-50 px-3 py-6 text-center text-sm text-slate-400">
+              还没有时间线事件。完成筛查、记录情绪或产生预警后会自动生成。
+            </p>
+          )}
           {personalTimeline.map((event) => (
             <div key={`${event.date}-${event.title}`} className="relative">
               <span className="absolute -left-[18px] w-3 h-3 rounded-full bg-primary-500 border-2 border-white" />
@@ -108,7 +146,7 @@ export default function Cases() {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
           <FileText className="w-5 h-5 text-primary-600" />
           使用建议

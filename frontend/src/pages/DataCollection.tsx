@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { Link } from 'react-router-dom';
 import {
-  FileText, Mic, ImageIcon, Upload, Check, ChevronRight, Sparkles,
-  Square, Play, Pause, Trash2, CheckCircle2, X,
+  FileText, Mic, ImageIcon, Upload, ChevronRight, Sparkles,
+  Square, Play, Pause, Trash2, CheckCircle2, AlertCircle, X,
 } from 'lucide-react';
 import { uploadFile } from '../services/mockApi';
+import { questionnaireCatalog } from '../data/mockData';
 
 type Tab = 'text' | 'audio' | 'image';
 type RecordState = 'idle' | 'requesting' | 'recording' | 'stopped';
@@ -25,14 +27,6 @@ interface ImageEntry {
   file?: File;
 }
 
-const questionnaires = [
-  { id: 'phq9', name: 'PHQ-9 抑郁症筛查量表', questions: 9, time: '约3分钟' },
-  { id: 'gad7', name: 'GAD-7 广泛性焦虑量表', questions: 7, time: '约2分钟' },
-  { id: 'scl90', name: 'SCL-90 症状自评量表', questions: 90, time: '约15分钟' },
-  { id: 'sds', name: 'SDS 抑郁自评量表', questions: 20, time: '约5分钟' },
-  { id: 'sas', name: 'SAS 焦虑自评量表', questions: 20, time: '约5分钟' },
-];
-
 function formatTime(seconds: number) {
   const m = Math.floor(seconds / 60).toString().padStart(2, '0');
   const s = (seconds % 60).toString().padStart(2, '0');
@@ -53,6 +47,7 @@ function AudioTab() {
   const [audioList, setAudioList] = useState<AudioEntry[]>([]);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [uploadError, setUploadError] = useState('');
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
@@ -153,7 +148,7 @@ function AudioTab() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Recorder */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-4">实时录音</h3>
         <div className="flex flex-col items-center py-6 gap-4">
           {/* Mic button */}
@@ -165,7 +160,7 @@ function AudioTab() {
                 ? 'bg-danger-500 hover:bg-danger-600 animate-pulse'
                 : recordState === 'requesting'
                   ? 'bg-slate-200 cursor-not-allowed'
-                  : 'bg-primary-600 hover:bg-primary-700'
+                  : 'bg-primary-500 hover:bg-primary-600'
               }`}
           >
             {recordState === 'recording'
@@ -193,7 +188,7 @@ function AudioTab() {
       </div>
 
       {/* Upload & List */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col gap-4">
+      <div className="ui-card p-5 flex flex-col gap-4">
         <h3 className="font-semibold text-slate-800">上传 / 已采集音频</h3>
 
         <div
@@ -221,7 +216,7 @@ function AudioTab() {
               <div key={entry.id} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg">
                 <button
                   onClick={() => togglePlay(entry)}
-                  className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center shrink-0 hover:bg-primary-700 cursor-pointer"
+                  className="w-8 h-8 rounded-full bg-primary-500 flex items-center justify-center shrink-0 hover:bg-primary-600 cursor-pointer"
                 >
                   {playingId === entry.id
                     ? <Pause className="w-3.5 h-3.5 text-white" />
@@ -247,14 +242,26 @@ function AudioTab() {
         {audioList.length > 0 && !submitted && (
           <button
             onClick={async () => {
+              setUploadError('');
+              const failed: string[] = [];
               for (const entry of audioList) {
-                if (entry.file) {
-                  try { await uploadFile(entry.file); } catch (e) { console.error('上传音频失败', e); }
+                if (!entry.file) continue;
+                try {
+                  await uploadFile(entry.file);
+                } catch (e) {
+                  console.error('上传音频失败', e);
+                  failed.push(entry.name);
                 }
               }
-              setSubmitted(true);
+              // 只有真正全部成功才报成功。之前无论成败都显示"哈希编码完成"，
+              // 而后端 /api/upload 目前固定返回 503，属于误报。
+              if (failed.length) {
+                setUploadError(`${failed.length} 个文件未能上传：${failed.join('、')}`);
+              } else {
+                setSubmitted(true);
+              }
             }}
-            className="inline-flex items-center justify-center gap-2 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-colors cursor-pointer"
+            className="inline-flex items-center justify-center gap-2 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer"
           >
             <Sparkles className="w-4 h-4" /> 送入动态哈希引擎
           </button>
@@ -263,6 +270,17 @@ function AudioTab() {
           <div className="flex items-center gap-2 py-2.5 px-4 bg-success-50 rounded-lg border border-success-500/30">
             <CheckCircle2 className="w-4 h-4 text-success-600" />
             <p className="text-sm text-success-700">已提交 {audioList.length} 条音频，哈希编码完成</p>
+          </div>
+        )}
+        {uploadError && (
+          <div className="flex items-start gap-2 py-2.5 px-4 bg-danger-50 rounded-lg border border-danger-500/30">
+            <AlertCircle className="w-4 h-4 text-danger-600 mt-0.5 shrink-0" />
+            <p className="text-sm text-danger-700">
+              {uploadError}
+              <span className="text-danger-600/80">
+                （本部署的文件上传后端尚未启用，返回 503；数据未送入哈希引擎）
+              </span>
+            </p>
           </div>
         )}
       </div>
@@ -274,6 +292,7 @@ function AudioTab() {
 function ImageTab() {
   const [images, setImages] = useState<ImageEntry[]>([]);
   const [submitted, setSubmitted] = useState(false);
+  const [uploadError, setUploadError] = useState('');
   const [dragging, setDragging] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -295,10 +314,10 @@ function ImageTab() {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Drop zone */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-2">绘画 / 图像上传</h3>
-        <p className="text-sm text-slate-400 mb-4">
-          请上传房树人测试（HTP）或情绪日记配图，用于辅助识别认知与情绪表达特征
+        <p className="text-sm text-slate-500 mb-4">
+          可上传房树人绘画或情绪日记配图。图片仅用于辅助了解情绪表达，不能单独作为诊断依据。
         </p>
         <div
           onClick={() => fileRef.current?.click()}
@@ -320,10 +339,14 @@ function ImageTab() {
           className="hidden"
           onChange={(e) => addFiles(e.target.files)}
         />
+        <div className="mt-3 space-y-1 text-xs leading-5 text-slate-500">
+          <p className="text-[11px]">房树人（HTP）：画一幅包含房子、树和人的图，拍照或扫描后上传；不需要画得好看。</p>
+          <p>情绪日记配图：上传能表达当天心情的照片或画，例如风景或涂鸦。</p>
+        </div>
       </div>
 
       {/* Preview */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm flex flex-col gap-4">
+      <div className="ui-card p-5 flex flex-col gap-4">
         <h3 className="font-semibold text-slate-800">已上传图像（{images.length}）</h3>
 
         {images.length === 0 ? (
@@ -336,7 +359,8 @@ function ImageTab() {
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors flex items-center justify-center">
                   <button
                     onClick={() => remove(img.id)}
-                    className="opacity-0 group-hover:opacity-100 transition-opacity bg-white rounded-full p-1 cursor-pointer"
+                    aria-label="移除这张图片"
+                    className="bg-white rounded-md p-1 cursor-pointer"
                   >
                     <X className="w-4 h-4 text-danger-500" />
                   </button>
@@ -350,14 +374,25 @@ function ImageTab() {
         {images.length > 0 && !submitted && (
           <button
             onClick={async () => {
+              setUploadError('');
+              const failed: string[] = [];
               for (const img of images) {
-                if (img.file) {
-                  try { await uploadFile(img.file); } catch (e) { console.error('上传图像失败', e); }
+                if (!img.file) continue;
+                try {
+                  await uploadFile(img.file);
+                } catch (e) {
+                  console.error('上传图像失败', e);
+                  failed.push(img.name);
                 }
               }
-              setSubmitted(true);
+              // 同上：只有真正全部成功才报成功，避免"哈希编码完成"的误报
+              if (failed.length) {
+                setUploadError(`${failed.length} 张图像未能上传：${failed.join('、')}`);
+              } else {
+                setSubmitted(true);
+              }
             }}
-            className="inline-flex items-center justify-center gap-2 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium transition-colors cursor-pointer"
+            className="inline-flex items-center justify-center gap-2 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer"
           >
             <Sparkles className="w-4 h-4" /> 送入动态哈希引擎
           </button>
@@ -368,6 +403,17 @@ function ImageTab() {
             <p className="text-sm text-success-700">已提交 {images.length} 张图像，图像哈希编码完成</p>
           </div>
         )}
+        {uploadError && (
+          <div className="flex items-start gap-2 py-2.5 px-4 bg-danger-50 rounded-lg border border-danger-500/30">
+            <AlertCircle className="w-4 h-4 text-danger-600 mt-0.5 shrink-0" />
+            <p className="text-sm text-danger-700">
+              {uploadError}
+              <span className="text-danger-600/80">
+                （本部署的文件上传后端尚未启用，返回 503；数据未送入哈希引擎）
+              </span>
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -375,61 +421,44 @@ function ImageTab() {
 
 // ─── Text Tab ─────────────────────────────────────────────────────────────────
 function TextTab() {
-  const [selectedQ, setSelectedQ] = useState<string | null>(null);
   const [freeText, setFreeText] = useState('');
-  const [submitted, setSubmitted] = useState(false);
-
-  const handleSubmit = () => {
-    if (!freeText.trim()) return;
-    setSubmitted(true);
-    setTimeout(() => setSubmitted(false), 4000);
-  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      {/* Questionnaire selector */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-        <h3 className="font-semibold text-slate-800 mb-4">选择量表（跳转至筛查页作答）</h3>
+      {/* Questionnaire selector：点击直接跳转到筛查页并打开对应量表 */}
+      <div className="ui-card p-5">
+        <h3 className="font-semibold text-slate-800 mb-4">选择量表开始作答</h3>
         <div className="space-y-2">
-          {questionnaires.map((q) => (
-            <button
+          {questionnaireCatalog.map((q) => (
+            <Link
               key={q.id}
-              onClick={() => setSelectedQ(selectedQ === q.id ? null : q.id)}
-              className={`w-full flex items-center justify-between p-3.5 rounded-lg border transition-colors text-left cursor-pointer ${
-                selectedQ === q.id
-                  ? 'border-primary-500 bg-primary-50'
-                  : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'
-              }`}
+              to={`/personal/screening?paper=${encodeURIComponent(q.id)}`}
+              title={`去作答 ${q.name}`}
+              className="w-full flex items-center justify-between p-3.5 rounded-lg border border-slate-200 hover:border-primary-400 hover:bg-primary-50 transition-colors text-left"
             >
               <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                  selectedQ === q.id ? 'bg-primary-600 text-white' : 'bg-slate-100 text-slate-400'
-                }`}>
-                  {selectedQ === q.id ? <Check className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-slate-100 text-slate-400">
+                  <FileText className="w-4 h-4" />
                 </div>
                 <div>
                   <p className="text-sm font-medium text-slate-800">{q.name}</p>
-                  <p className="text-xs text-slate-400">{q.questions} 题 · {q.time}</p>
+                  <p className="text-xs text-slate-400">{q.questions} 题 · 约{q.minutes}分钟</p>
                 </div>
               </div>
-              <ChevronRight className="w-4 h-4 text-slate-300" />
-            </button>
+              <ChevronRight className="w-4 h-4 text-slate-400" />
+            </Link>
           ))}
         </div>
-        {selectedQ && (
-          <p className="mt-3 text-xs text-slate-400">
-            请前往「心理筛查」页面作答 {questionnaires.find(q => q.id === selectedQ)?.name}
-          </p>
-        )}
       </div>
 
       {/* Free text */}
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h3 className="font-semibold text-slate-800 mb-2">开放式情绪日记</h3>
         <p className="text-sm text-slate-400 mb-3">
           描述你近期的情绪状态、睡眠情况、人际关系和学习压力变化
         </p>
         <textarea
+          aria-label="情绪日记内容"
           value={freeText}
           onChange={(e) => setFreeText(e.target.value)}
           placeholder="今天感觉...最近睡眠...人际上..."
@@ -438,20 +467,16 @@ function TextTab() {
         <div className="flex items-center justify-between mt-3">
           <span className="text-xs text-slate-400">{freeText.length} 字</span>
           <div className="flex items-center gap-2">
-            {submitted && (
-              <span className="text-xs text-success-600 flex items-center gap-1">
-                <CheckCircle2 className="w-3.5 h-3.5" /> 已送入哈希检索
-              </span>
-            )}
             <button
-              onClick={handleSubmit}
-              disabled={!freeText.trim()}
-              className="px-4 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary-700 transition-colors cursor-pointer"
+              disabled
+              title="日记保存功能暂未开放"
+              className="px-4 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-primary-600 transition-colors cursor-pointer"
             >
-              提交文本
+              暂不可提交
             </button>
           </div>
         </div>
+        <p className="mt-3 text-xs leading-5 text-slate-500">日记保存功能暂未开放，此处输入的内容不会保存。你可以先通过量表记录状态。</p>
       </div>
     </div>
   );
@@ -469,7 +494,7 @@ export default function DataCollection() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h3 className="text-base font-semibold text-slate-800">多模态采集工作台</h3>
         <p className="text-sm text-slate-500 mt-2 leading-6">
           你可以在这里提交文本日记、语音片段和图片。系统会进行动态跨模态哈希编码，与历史模式检索，再结合
@@ -478,7 +503,7 @@ export default function DataCollection() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 bg-white rounded-xl border border-slate-200 p-1.5 shadow-sm w-fit">
+      <div className="ui-card flex gap-2 p-1.5 w-fit">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -487,7 +512,7 @@ export default function DataCollection() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors cursor-pointer ${
-                isActive ? 'bg-primary-600 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
+                isActive ? 'bg-primary-500 text-white shadow-sm' : 'text-slate-600 hover:bg-slate-100'
               }`}
             >
               <Icon className="w-4 h-4" />

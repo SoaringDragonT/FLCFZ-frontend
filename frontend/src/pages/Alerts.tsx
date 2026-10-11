@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Filter, ChevronDown, Clock, AlertTriangle, ShieldAlert } from 'lucide-react';
 import { type WarningEvent } from '../data/mockData';
-import { getWarnings } from '../services/mockApi';
+import { getWarnings, updateWarningStatus } from '../services/mockApi';
 import AlertBadge from '../components/AlertBadge';
 import StatusBadge from '../components/StatusBadge';
 
@@ -10,6 +10,7 @@ export default function Alerts() {
   const [filterStatus, setFilterStatus] = useState<'all' | 'new' | 'tracking' | 'resolved'>('all');
   const [selectedAlert, setSelectedAlert] = useState<string | null>(null);
   const [warningEvents, setWarningEvents] = useState<WarningEvent[]>([]);
+  const [statusNotice, setStatusNotice] = useState<{ kind: 'busy' | 'ok' | 'error'; text: string } | null>(null);
   const [, setLoading] = useState(false);
 
   useEffect(() => {
@@ -34,9 +35,33 @@ export default function Alerts() {
 
   const selected = warningEvents.find((a) => a.id === selectedAlert);
 
+  /**
+   * 标记预警状态。先做乐观更新让界面立刻响应，失败则回滚并明确播报
+   * （静默回滚会让用户以为成功了，是最坏的结果）。
+   */
+  const handleStatusChange = async (next: 'tracking' | 'resolved') => {
+    if (!selected) return;
+    const prev = selected;
+    setStatusNotice({ kind: 'busy', text: '正在同步…' });
+    setWarningEvents((list) =>
+      list.map((a) =>
+        a.id === prev.id
+          ? { ...a, status: next, updatedAt: new Date().toLocaleString('sv-SE').slice(0, 16) }
+          : a
+      )
+    );
+    try {
+      await updateWarningStatus(prev.id, next);
+      setStatusNotice({ kind: 'ok', text: next === 'tracking' ? '已标记为跟踪中' : '已标记为已缓解' });
+    } catch (e) {
+      setWarningEvents((list) => list.map((a) => (a.id === prev.id ? prev : a)));
+      setStatusNotice({ kind: 'error', text: `同步失败，已回滚：${(e as Error).message}` });
+    }
+  };
+
   return (
     <div className="space-y-5">
-      <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      <div className="ui-card p-5">
         <h3 className="text-base font-semibold text-slate-800">个人预警中心</h3>
         <p className="text-sm text-slate-500 mt-2">
           当模型检测到“情绪持续下行、压力过载或睡眠显著下降”时，将在这里推送分级预警与可执行建议。
@@ -51,7 +76,7 @@ export default function Alerts() {
           { label: '已缓解', count: warningEvents.filter((a) => a.status === 'resolved').length, color: 'text-success-600 bg-success-50' },
           { label: '高风险', count: warningEvents.filter((a) => a.level === 'red').length, color: 'text-orange-600 bg-orange-50' },
         ].map((item) => (
-          <div key={item.label} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+          <div key={item.label} className="ui-card p-4">
             <p className="text-sm text-slate-500">{item.label}</p>
             <p className={`text-2xl font-bold mt-1 ${item.color.split(' ')[0]}`}>{item.count}</p>
           </div>
@@ -59,7 +84,7 @@ export default function Alerts() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3">
         <div className="relative">
           <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <select
@@ -97,7 +122,7 @@ export default function Alerts() {
             <div
               key={alert.id}
               onClick={() => setSelectedAlert(alert.id)}
-              className={`bg-white rounded-xl border p-4 shadow-sm cursor-pointer transition-colors ${
+              className={`bg-white rounded-2xl border p-5 cursor-pointer transition-colors ${
                 selectedAlert === alert.id
                   ? 'border-primary-500 ring-1 ring-primary-200'
                   : 'border-slate-200 hover:border-slate-300'
@@ -125,14 +150,18 @@ export default function Alerts() {
             </div>
           ))}
           {filtered.length === 0 && (
-            <div className="text-center py-12 text-slate-400 text-sm bg-white rounded-xl border border-slate-200">
-              暂无匹配的预警记录
+            <div className="ui-card text-center py-12 text-slate-400 text-sm">
+              {warningEvents.length === 0
+                ? '还没有预警记录。系统检测到情绪、压力或睡眠的持续变化时，会在这里提醒你。'
+                : '当前筛选条件下没有预警记录，试试把「等级」或「状态」改成全部。'}
             </div>
           )}
         </div>
 
         {/* Alert Detail Panel */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 h-fit sticky top-6">
+        {/* 不用 sticky / h-fit：面板随列表一起滚动，并撑到与左侧列表等高，
+            这样两列的上下边缘始终对齐（此前 sticky 会在滚动时错位） */}
+        <div className="ui-card flex flex-col p-5">
           {selected ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
@@ -162,20 +191,42 @@ export default function Alerts() {
               </div>
               <div className="flex gap-2 pt-2">
                 {selected.status === 'new' && (
-                  <button className="flex-1 py-2 bg-primary-600 text-white rounded-lg text-sm font-medium hover:bg-primary-700 cursor-pointer">
+                  <button
+                    onClick={() => handleStatusChange('tracking')}
+                    disabled={statusNotice?.kind === 'busy'}
+                    className="flex-1 py-2 bg-primary-500 text-white rounded-lg text-sm font-medium hover:bg-primary-600 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
                     标记为跟踪中
                   </button>
                 )}
                 {selected.status === 'tracking' && (
-                  <button className="flex-1 py-2 bg-success-600 text-white rounded-lg text-sm font-medium hover:bg-success-500 cursor-pointer">
+                  <button
+                    onClick={() => handleStatusChange('resolved')}
+                    disabled={statusNotice?.kind === 'busy'}
+                    className="flex-1 py-2 bg-success-600 text-white rounded-lg text-sm font-medium hover:bg-success-500 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
                     标记为已缓解
                   </button>
                 )}
               </div>
+              {statusNotice && (
+                <p
+                  className={`text-xs mt-2 ${
+                    statusNotice.kind === 'error'
+                      ? 'text-danger-600'
+                      : statusNotice.kind === 'ok'
+                        ? 'text-success-600'
+                        : 'text-slate-500'
+                  }`}
+                  role="status"
+                >
+                  {statusNotice.text}
+                </p>
+              )}
             </div>
           ) : (
-            <div className="text-center py-8 text-slate-400 text-sm">
-              <ShieldAlert className="w-8 h-8 mx-auto mb-2 text-slate-200" />
+            <div className="flex flex-1 flex-col items-center justify-center py-8 text-center text-sm text-slate-400">
+              <ShieldAlert className="mb-2 h-8 w-8 text-slate-200" />
               选择一条预警查看详情
             </div>
           )}
