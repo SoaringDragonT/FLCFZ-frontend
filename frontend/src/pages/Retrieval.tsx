@@ -1,4 +1,24 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import {
+  corpusRecords,
+  MODALITY_META,
+  type Modality,
+} from '../data/corpusRecords';
+
+/** 语料记录等级外观：与全站 稳定/关注/警告/高危 同一套口径 */
+const LEVEL_NAME: Record<string, string> = {
+  green: '稳定',
+  yellow: '关注',
+  orange: '警告',
+  red: '高危',
+};
+const LEVEL_PILL: Record<string, string> = {
+  green: 'bg-success-50 text-success-600',
+  yellow: 'bg-warning-50 text-warning-600',
+  orange: 'bg-orange-50 text-orange-600',
+  red: 'bg-danger-50 text-danger-600',
+};
 import {
   Search,
   FileText,
@@ -11,11 +31,16 @@ import {
   X,
   FolderOpen,
   Square,
+  ArrowLeft,
+  Camera,
 } from 'lucide-react';
-import { search, fetchRetrievalMedia } from '../services/mockApi';
-import { userProfile } from '../data/mockData';
+import { getScreeningRecords, getPersonalSupplements, search, fetchRetrievalMedia, fetchRagReport } from '../services/mockApi';
+import { USE_MOCK } from '../services/http';
+import { supplementModalityText } from '../services/localKg';
+import { getCurrentSession } from '../auth/session';
 import type { RetrievalResult, RetrievalIndexInfo } from '../data/mockData';
 import AlertBadge from '../components/AlertBadge';
+import CameraCapture from '../components/CameraCapture';
 import { useAudioRecorder } from '../hooks/useAudioRecorder';
 import { toCorpusWavFile } from '../utils/audioRecorder';
 
@@ -63,6 +88,8 @@ interface RagReport {
   riskLevel: string;
   sections: { title: string; content: string }[];
   recommendations: string[];
+  /** true = 结论由规则模板 + 检索命中生成（不经过大模型） */
+  mock?: boolean;
 }
 
 export default function Retrieval() {
@@ -70,8 +97,69 @@ export default function Retrieval() {
   const [scope, setScope] = useState<'all' | 'text' | 'audio' | 'image'>('all');
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<RetrievalResult[] | null>(null);
+  /* 语料库历史记录一次先列 20 条，避免 300 条一口气铺满页面 */
+  const [shown, setShown] = useState(20);
+  /* 语料库历史记录的模态分类：全部 / 文本 / 语音 / 图像 */
+  const [histMode, setHistMode] = useState<'all' | Modality>('all');
+  /* 自己的记录：两路合并后置顶显示——
+     ① 挂在筛查记录上的补充（records 上的 supplement 字段）；
+     ② 直接挂在用户名下的补充（新账号还没做过筛查时的采集，见
+        backend save_personal_supplement）。不合并的话，新账号在采集页
+        传的内容在这张列表里看不到（"只上传不挂靠"的另一面）。 */
+  const [mine, setMine] = useState<typeof corpusRecords>([]);
+  useEffect(() => {
+    let alive = true;
+    Promise.all([getScreeningRecords(), getPersonalSupplements()])
+      .then(([rs, sups]) => {
+        if (!alive) return;
+        const fromRecords = rs
+          .filter((r) => r.supplement)
+          .map((r) => {
+            const sup = r.supplement!;
+            return {
+              id: r.id,
+              date: r.date,
+              themes: r.moodTag ? [r.moodTag] : [],
+              /* 有哈希检索分析的用分析等级，没有就回退记录自身的等级 */
+              level: sup.analysis?.level ?? r.level,
+              severity: 0,
+              context: '我的记录',
+              text: sup.kind === 'text' ? (sup.text ?? '') : '',
+              /* 模态文本统一走 supplementModalityText（与首页「最近一次输入」同一处逻辑）：
+                 有分析描述就显示「语音片段特征：…」/「记录到的非言语线索：…」，
+                 没有就如实回退成文件名 */
+              audio: sup.kind === 'audio' ? supplementModalityText(sup, 'audio') : '',
+              image: sup.kind === 'image' ? supplementModalityText(sup, 'image') : '',
+            };
+          });
+        const fromUser = sups
+          .filter((s) => !s.screeningId)
+          .map((s) => ({
+            id: `SUP-${s.id}`,
+            date: s.createdAt ?? '',
+            themes: [] as string[],
+            level: s.analysis?.level ?? 'green',
+            severity: 0,
+            context: '我的采集',
+            text: s.kind === 'text' ? (s.text ?? '') : '',
+            audio: s.kind === 'audio' ? supplementModalityText(s, 'audio') : '',
+            image: s.kind === 'image' ? supplementModalityText(s, 'image') : '',
+          }));
+        setMine([...fromUser, ...fromRecords]);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
   const [report, setReport] = useState<RagReport | null>(null);
-  const [showReport, setShowReport] = useState(false);
+  /** 报告两阶段（2026-10-14 产品口径）：检索结果秒出（哈希检索的优势），
+   *  报告区先显示"大模型思考中"，RAG 深度报告异步回来后替换展示。 */
+  const [reportPhase, setReportPhase] = useState<'idle' | 'thinking' | 'done'>('idle');
+  /** 规则报告兜底：大模型失败 / Mock / 超时的时候显示，并标注来源 */
+  const fallbackReportRef = useRef<RagReport | null>(null);
+  /** 当前报告请求的序号：思考期间再次检索时，旧请求回来直接丢弃 */
+  const reportSeqRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [indexInfo, setIndexInfo] = useState<RetrievalIndexInfo | null>(null);
   // 查询模态：文本直接检索；图像/语音需先选文件（本地预览，提交时转 base64）
@@ -152,6 +240,9 @@ export default function Retrieval() {
 
   // 麦克风按钮的下拉菜单：从文件选 / 直接录音
   const [micMenuOpen, setMicMenuOpen] = useState(false);
+  /** 图片线索的两个来源：从文件选择 / 现场拍照（摄像头） */
+  const [imgMenuOpen, setImgMenuOpen] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const recorder = useAudioRecorder((file) => {
     pickMedia('audio', file);
     setMicMenuOpen(false);
@@ -161,13 +252,17 @@ export default function Retrieval() {
 
   /** 执行检索。scopeOverride 用于「点范围即检索」：setScope 是异步的，
    *  同一轮事件里读到的 scope 还是旧值，所以显式传入本次要用的范围。 */
-  const handleSearch = async (scopeOverride?: typeof scope) => {
-    if (!canSearch) return;
+  const handleSearch = async (scopeOverride?: typeof scope, queryOverride?: string) => {
+    /* queryOverride 用于「带参进来自动检索」：setQuery 是异步的，同一轮事件里
+       读到的 query 还是旧值，所以显式传入本次要用的查询词。 */
+    const effQuery = queryOverride ?? query;
+    const effCanSearch = queryModality === 'text' ? !!effQuery.trim() : !!mediaFile;
+    if (!effCanSearch) return;
     const effScope = scopeOverride ?? scope;
     setLoading(true);
     setResults(null);
     setReport(null);
-    setShowReport(false);
+    setReportPhase('idle');
     setError(null);
     setIndexInfo(null);
     try {
@@ -175,21 +270,102 @@ export default function Retrieval() {
       if (queryModality !== 'text' && mediaFile) {
         mediaBase64 = await fileToBase64(mediaFile);
       }
-      const res = await search(query, {
+      const res = await search(effQuery, {
         modality: queryModality,
         modalityFilter: effScope === 'all' ? undefined : effScope,
         mediaBase64,
         mediaName: mediaFile?.name,
       });
+      /* 检索结果秒出，立即渲染（哈希检索的优势）。报告分两步：
+         ① 检索接口附带的规则结论先存为兜底（大模型不可用时展示）；
+         ② 报告区进入"大模型思考中"，异步请求 RAG 深度报告，回来后替换。 */
+      const hits = ((res.results ?? []) as RetrievalResult[]).slice(0, 10).map((r) => ({
+        recordId: r.recordId,
+        alertLevel: r.alertLevel,
+        similarity: r.similarity,
+        summary: r.summary,
+      }));
       setResults((res.results ?? []) as RetrievalResult[]);
-      setReport((res.report ?? null) as RagReport | null);
       setIndexInfo((res.index ?? null) as RetrievalIndexInfo | null);
+      const ruleReport = (res.report ?? null) as RagReport | null;
+      fallbackReportRef.current = ruleReport;
+      if (!ruleReport) {
+        setReportPhase('done');
+        return;
+      }
+      setReportPhase('thinking');
+      const seq = ++reportSeqRef.current; // 思考期间再次检索时，旧报告作废
+      void (async () => {
+        try {
+          const rr = await fetchRagReport<RagReport>({ query: effQuery, hits });
+          if (seq !== reportSeqRef.current) return;
+          if (rr.mock || !rr.report) {
+            setReport(ruleReport); // 引擎降级：如实显示规则报告
+          } else {
+            setReport(rr.report); // 大模型报告
+          }
+        } catch {
+          if (seq !== reportSeqRef.current) return;
+          setReport(ruleReport); // 超时 / 失败：兜底规则报告
+        } finally {
+          if (seq === reportSeqRef.current) setReportPhase('done');
+        }
+      })();
     } catch (err) {
       setError((err as Error).message || '检索失败，请稍后重试');
+      setReportPhase('done');
     } finally {
       setLoading(false);
     }
   };
+
+  /* 从首页「查看检索依据」跳进来时地址是 #/personal/retrieval?q=<那条输入>。
+     本项目用 HashRouter，查询串在 hash 里 —— useSearchParams 读的正是 hash 里的
+     location，而 window.location.search 在 hash 路由下永远是空的（别用它）。
+     带 q 就自动填入搜索框并立即检索，用户不必再输一遍；没有 q 时保持空表单。
+     autoRanRef 只防重复：同一条 q 只自动跑一次，重渲染不再发请求。 */
+  /* 历史记录的模态过滤（2026-10-14 用户实测："四个按钮点了不起作用"——
+     以前只切了展示的单元，列表与条数都没动）。口径：
+       · 语料条目：按"该模态单元是否存在"过滤（每条的 文本/语音/图像 三个单元都在，
+         所以条数不变，但每条展示的单元会跟着切）；
+       · 自己采集的记录（mine）：只在该模态下出现（supplement 只能是文字/语音/图片之一），
+         已经并入主列表并带「我的记录」标签 —— 不再另开「我的输入」分组（同一批数据
+         显示两遍会让条数重复计入）。
+     合并后才是这份列表真实的条数与顺序（自己的在前）。 */
+  const hasUnit = (row: { text?: string; audio?: string; image?: string }, mode: Modality) =>
+    (row[mode] ?? '').trim().length > 0;
+  const corpusVisible = histMode === 'all' ? corpusRecords : corpusRecords.filter((r) => hasUnit(r, histMode));
+  const mineVisible = histMode === 'all' ? mine : mine.filter((r) => hasUnit(r, histMode));
+  const historyRows = [...mineVisible, ...corpusVisible];
+  const historyTotal = historyRows.length;
+
+  /* 每个模态下到底有多少条：直接印在按钮上 —— 语料每条都有三个单元，条数不变，
+     光看列表看不出按钮有没有生效（2026-10-14 用户实测"点了没反应"），
+     计数 + 行内单元正文 + 一句口径说明，三处一起把"确实切了"讲清楚。 */
+  const modalityCount = (mode: 'all' | Modality) =>
+    mode === 'all'
+      ? corpusRecords.length + mine.length
+      : corpusRecords.filter((r) => hasUnit(r, mode)).length +
+        mine.filter((r) => hasUnit(r, mode)).length;
+
+  /** 每个模态实际展示的是什么（说明文字必须与真实行为一致） */
+  const HIST_MODE_DESC: Record<'all' | Modality, string> = {
+    all: '全部模态：语料条目显示文本单元，自己的记录按实际采集到的模态显示',
+    text: '当前显示每条记录的文本单元（自述原文）',
+    audio: '当前显示每条记录的语音单元文本（语音特征描述）',
+    image: '当前显示每条记录的图像单元描述（非言语线索）',
+  };
+
+  const [searchParams] = useSearchParams();
+  const autoQuery = searchParams.get('q') ?? '';
+  const autoRanRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!autoQuery.trim() || autoRanRef.current === autoQuery) return;
+    autoRanRef.current = autoQuery;
+    setQuery(autoQuery);
+    void handleSearch(undefined, autoQuery);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoQuery]);
 
   return (
     <div className="space-y-6">
@@ -284,17 +460,46 @@ export default function Retrieval() {
               </>
             )}
           </div>
-          <button
-            onClick={() => imageInputRef.current?.click()}
-            title="上传一张面部图像作为查询线索"
-            className={`px-3 py-2.5 border rounded-lg transition-colors cursor-pointer ${
-              queryModality === 'image'
-                ? 'border-primary-300 bg-primary-50 text-primary-600'
-                : 'border-slate-200 text-slate-500 hover:bg-slate-50'
-            }`}
-          >
-            <Image className="w-4 h-4" />
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setImgMenuOpen((v) => !v)}
+              title="上传一张面部图像，或现场拍照作为查询线索"
+              className={`px-3 py-2.5 border rounded-lg transition-colors cursor-pointer ${
+                queryModality === 'image'
+                  ? 'border-primary-300 bg-primary-50 text-primary-600'
+                  : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              <Image className="w-4 h-4" />
+            </button>
+            {imgMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setImgMenuOpen(false)} />
+                <div className="absolute right-0 top-full mt-1 z-20 w-44 bg-white border border-slate-200 rounded-lg shadow-lg py-1">
+                  <button
+                    onClick={() => {
+                      setImgMenuOpen(false);
+                      imageInputRef.current?.click();
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    <FolderOpen className="w-3.5 h-3.5" />
+                    从文件选择
+                  </button>
+                  <button
+                    onClick={() => {
+                      setImgMenuOpen(false);
+                      setCameraOpen(true);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    现场拍照
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
           <button
             onClick={() => handleSearch()}
             disabled={loading || !canSearch}
@@ -410,6 +615,8 @@ export default function Retrieval() {
           <div className="ui-card ">
             <div className="flex items-center justify-between p-5 border-b border-slate-100">
               <div>
+                {/* 检索后语料库历史列表会被结果区顶掉，这里留一个明确入口回去，
+                    否则用户搜完就找不到那份列表了 */}
                 <h3 className="font-semibold text-slate-800">
                   检索结果{' '}
                   <span className="text-sm font-normal text-slate-400">
@@ -417,6 +624,13 @@ export default function Retrieval() {
                       ? '（没有找到相似模式：试试换一种描述，或把检索范围改成「全部模态」）'
                       : `（找到 ${results.length} 个高相似模式）`}
                   </span>
+                  {/* 演示模式（VITE_USE_MOCK=true）下命中的是仓库自带的示例语料，
+                      不是按本次查询从真实索引里算出来的 —— 如实标注，别让人当真结果 */}
+                  {USE_MOCK && (
+                    <span className="ml-2 align-middle rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500">
+                      演示数据
+                    </span>
+                  )}
                 </h3>
                 {indexInfo && (
                   <>
@@ -452,12 +666,21 @@ export default function Retrieval() {
                   </p>
                 )}
               </div>
-              <button
-                onClick={() => setShowReport((v) => !v)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer"
-              >
-                <Sparkles className="w-4 h-4" /> {showReport ? '收起报告' : 'RAG智能分析'}
-              </button>
+              <div className="flex shrink-0 items-center gap-2.5">
+                {/* 「RAG智能分析」按钮已按用户要求去掉：报告随检索结果自动生成、就地展示，
+                    用户不需要点开也不需要关闭（见下方 RAG 区块）。这里只留返回入口。 */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setResults(null);
+                    setReport(null);
+                    setError(null);
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium transition-colors cursor-pointer"
+                >
+                  <ArrowLeft className="w-4 h-4" /> 返回历史记录
+                </button>
+              </div>
             </div>
             <div className="divide-y divide-slate-100">
               {results.map((result) => {
@@ -642,23 +865,61 @@ export default function Retrieval() {
             </div>
           </div>
 
-          {showReport && report && (
-            <div className="ui-card ">
+          {/* RAG 智能分析：随检索结果**自动生成、就地展示**（用户 2026-10-14 要求去掉
+              "点一下才看报告"的按钮，也不再需要关闭）。拿不到报告时只在这里就地说明，
+              上面的检索命中不受影响。 */}
+          <div className="ui-card">
               <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-primary-50 to-white rounded-t-xl">
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
                   <Sparkles className="w-6 h-6 text-primary-600" />
                   <div>
                     <h3 className="font-semibold text-slate-800">RAG 智能分析报告</h3>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      用户：{userProfile.name}，综合 {results.length} 个相似模式与知识库生成
+                      用户：{getCurrentSession()?.username || '用户'}，综合 {results.length} 个相似模式与知识库生成
                     </p>
                   </div>
-                  <div className="ml-auto px-3 py-1 bg-danger-50 text-danger-600 rounded-full text-sm font-medium">
-                    高风险
+                  <div className="ml-auto flex items-center gap-2">
+                    {/* 演示模式下命中的是仓库自带的示例语料与示例报告：如实标注来源 */}
+                    {USE_MOCK && (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500">
+                        演示数据
+                      </span>
+                    )}
+                    {report?.riskLevel && <div className="px-3 py-1 bg-slate-100 text-slate-700 rounded-md text-sm font-medium">
+                      风险提示：{report.riskLevel}
+                    </div>}
+                    {/* 结论来源如实标注：mock=规则兜底（大模型不可用），否则为大模型生成 */}
+                    {reportPhase === 'done' && report?.mock && (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-normal text-slate-500">
+                        规则分析 · 依据检索命中
+                      </span>
+                    )}
+                    {reportPhase === 'done' && report && !report.mock && (
+                      <span className="rounded-full bg-primary-50 px-2 py-0.5 text-xs font-normal text-primary-600">
+                        大模型分析
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
 
+              {reportPhase === 'thinking' && (
+                <div className="p-5 flex items-center gap-3 text-sm text-slate-500">
+                  <Loader2 className="w-4 h-4 animate-spin text-primary-500 shrink-0" />
+                  <span>
+                    大模型思考中：正在结合知识库与本次 {results.length} 条检索命中生成深度分析报告，
+                    通常需要 30 ~ 60 秒，期间可以先查看上面的检索结果。
+                  </span>
+                </div>
+              )}
+
+              {reportPhase === 'done' && !report && (
+                <p className="p-5 text-sm leading-6 text-slate-500">
+                  本次没有返回分析结论（上面的检索命中不受影响）。可以稍后重试，或换一种描述再检索一次。
+                </p>
+              )}
+
+              {report && (
               <div className="p-5 space-y-5">
                 <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
                   <p className="text-sm text-slate-700 leading-relaxed">{report.summary}</p>
@@ -688,8 +949,8 @@ export default function Retrieval() {
                   </div>
                 </div>
               </div>
-            </div>
-          )}
+              )}
+          </div>
         </>
       )}
 
@@ -701,10 +962,122 @@ export default function Retrieval() {
       )}
 
       {!loading && !error && !results && (
-        <div className="text-center py-20">
-          <Search className="w-16 h-16 text-slate-200 mx-auto mb-4" />
-          <p className="text-slate-400 text-sm">输入你的状态描述，开始动态跨模态哈希检索</p>
-          <p className="text-slate-300 text-xs mt-1">支持文本、语音、图像多模态输入，输出 RAG 风险解释</p>
+        /* 还没检索时不再放一张空状态图：把语料库里真实存在的历史记录列出来，
+           点一条就把它的文字填进检索框 —— 既是"历史记录"，也是现成的检索样例。 */
+        <div className="bg-white rounded-xl border border-slate-200 p-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <div>
+              <h2 className="text-base font-semibold text-slate-800">
+                历史记录
+              </h2>
+              <p className="mt-1 text-xs text-slate-500">
+                共 {historyTotal} 条（含你自己采集的 {mineVisible.length} 条）。
+                {HIST_MODE_DESC[histMode]}
+                ；点一条直接用它的文本检索。
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {(['all', 'text', 'audio', 'image'] as const).map((m) => {
+                  const active = histMode === m;
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => { setHistMode(m); setShown(20); }}
+                      className={`rounded-lg border px-3 py-1.5 text-xs transition-colors ${
+                        active
+                          ? 'border-primary-300 bg-primary-50 font-medium text-primary-600'
+                          : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                      }`}
+                    >
+                      {m === 'all' ? '全部模态' : MODALITY_META[m].label}
+                      <span className={`ml-1 tabular-nums ${active ? '' : 'text-slate-400'}`}>
+                        {modalityCount(m)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <span className="text-xs tabular-nums text-slate-400">
+              已显示 {Math.min(shown, historyRows.length)} / {historyRows.length}
+            </span>
+          </div>
+
+          <ul className="mt-4 grid gap-3">
+            {historyRows.slice(0, shown).map((r) => (
+              <li key={r.id}>
+                <button
+                  type="button"
+                  onClick={() => setQuery(r.text)}
+                  className="w-full rounded-xl border border-slate-100 p-4 text-left transition-colors hover:border-primary-300 hover:bg-primary-50/40"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="flex items-center gap-2">
+                      <span className="text-xs font-medium tabular-nums text-slate-600">
+                        {r.id}
+                      </span>
+                      <span className="text-xs tabular-nums text-slate-400">{r.date}</span>
+                      {r.context && (
+                        <span className="text-xs text-slate-400">· {r.context}</span>
+                      )}
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400">
+                        {histMode === 'all'
+                          ? [r.text && '文本', r.audio && '语音', r.image && '图像']
+                              .filter(Boolean)
+                              .join(' · ')
+                          : `${MODALITY_META[histMode].label}单元`}
+                      </span>
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${LEVEL_PILL[r.level]}`}
+                      >
+                        {LEVEL_NAME[r.level]}
+                      </span>
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    {histMode === 'all'
+                      ? /* 全部模态：语料条目看文本单元；自己的记录只有采集到的那一个模态，
+                           按"文本→语音→图像"取第一个有内容的（否则自己的图片记录会是空白行） */
+                        r.text || r.audio || r.image
+                      : histMode === 'text'
+                        ? r.text
+                        : histMode === 'audio'
+                          ? r.audio
+                          : r.image}
+                  </p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {r.themes.map((t) => (
+                      <span
+                        key={t}
+                        className="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500"
+                      >
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                </button>
+              </li>
+            ))}
+          </ul>
+
+          {/* 该模态下一条都没有时给一句说明，不留空白（例如还没有任何图像采集） */}
+          {historyRows.length === 0 && (
+            <p className="mt-4 rounded-xl bg-slate-50 px-4 py-6 text-center text-sm text-slate-400">
+              当前筛选下还没有记录。切回「全部模态」，或先去「多模态采集」补一条这个模态的记录。
+            </p>
+          )}
+
+          {shown < historyRows.length && (
+            <button
+              type="button"
+              onClick={() => setShown((n) => n + 20)}
+              className="ui-button mt-4 w-full"
+            >
+              显示更多（还有 {historyRows.length - shown} 条）
+            </button>
+          )}
         </div>
       )}
 
@@ -743,6 +1116,13 @@ export default function Retrieval() {
           </div>
         </div>
       )}
+
+      {/* 现场拍照：拍完与"从文件选择"走同一条 pickMedia → base64 → 检索链路 */}
+      <CameraCapture
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onCapture={(file) => pickMedia('image', file)}
+      />
     </div>
   );
 }

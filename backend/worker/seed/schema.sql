@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS questionnaires (
 CREATE TABLE IF NOT EXISTS screenings (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     screening_id    TEXT NOT NULL UNIQUE,
+    user_id         INTEGER,
     name            TEXT NOT NULL,
     age             INTEGER,
     gender          TEXT,
@@ -58,6 +59,7 @@ CREATE TABLE IF NOT EXISTS screenings (
 );
 CREATE INDEX IF NOT EXISTS ix_screenings_id ON screenings(id);
 CREATE INDEX IF NOT EXISTS ix_screenings_screening_id ON screenings(screening_id);
+CREATE INDEX IF NOT EXISTS ix_screenings_user_id ON screenings(user_id);
 
 CREATE TABLE IF NOT EXISTS alert_rules (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,7 +79,9 @@ CREATE TABLE IF NOT EXISTS alert_rules (
 CREATE TABLE IF NOT EXISTS alerts (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     alert_id        TEXT NOT NULL UNIQUE,
-    screening_id    INTEGER NOT NULL,
+    -- screening_id 可空：多模态采集的预警挂在用户名下（user_id）；既有 D1 请执行 006
+    screening_id    INTEGER,
+    user_id         INTEGER,
     name            TEXT NOT NULL,
     level           TEXT DEFAULT 'green',
     trigger         TEXT,
@@ -94,6 +98,19 @@ CREATE TABLE IF NOT EXISTS alerts (
 CREATE INDEX IF NOT EXISTS ix_alerts_id ON alerts(id);
 CREATE INDEX IF NOT EXISTS ix_alerts_alert_id ON alerts(alert_id);
 
+CREATE TABLE IF NOT EXISTS alert_events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    alert_id    INTEGER NOT NULL,
+    actor_id    INTEGER NOT NULL,
+    from_status TEXT,
+    to_status   TEXT NOT NULL,
+    note        TEXT,
+    created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (alert_id) REFERENCES alerts(id),
+    FOREIGN KEY (actor_id) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS ix_alert_events_alert_id ON alert_events(alert_id);
+
 CREATE TABLE IF NOT EXISTS case_tag_master (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     name        TEXT NOT NULL UNIQUE,
@@ -105,6 +122,7 @@ CREATE TABLE IF NOT EXISTS case_tag_master (
 CREATE TABLE IF NOT EXISTS cases (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     case_id             TEXT NOT NULL UNIQUE,
+    user_id             INTEGER,
     name                TEXT NOT NULL,
     age                 INTEGER,
     gender              TEXT,
@@ -123,6 +141,7 @@ CREATE TABLE IF NOT EXISTS cases (
 );
 CREATE INDEX IF NOT EXISTS ix_cases_id ON cases(id);
 CREATE INDEX IF NOT EXISTS ix_cases_case_id ON cases(case_id);
+CREATE INDEX IF NOT EXISTS ix_cases_user_id ON cases(user_id);
 
 CREATE TABLE IF NOT EXISTS case_tags_association (
     case_id INTEGER NOT NULL,
@@ -161,3 +180,21 @@ CREATE TABLE IF NOT EXISTS media_files (
 );
 CREATE INDEX IF NOT EXISTS ix_media_files_id ON media_files(id);
 CREATE INDEX IF NOT EXISTS ix_media_files_file_id ON media_files(file_id);
+
+-- 「多模态采集」页的自愿补充（文本日记 / 语音片段 / 图片）。
+-- 与 app/db/database.py 的 SCHEMA_SQL 保持同步。既有 D1 请执行 005_screening_supplements.sql。
+-- 两种挂靠：screening_id 非空=挂在筛查记录下；为空=挂在用户名下（新账号首次采集）。
+CREATE TABLE IF NOT EXISTS screening_supplements (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id         INTEGER,
+    screening_id    TEXT,
+    kind            TEXT NOT NULL,
+    text            TEXT,
+    filename        TEXT,
+    url             TEXT,
+    description     TEXT,
+    analysis        TEXT,
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS ix_screening_supplements_sid ON screening_supplements(screening_id);
+CREATE INDEX IF NOT EXISTS ix_screening_supplements_uid ON screening_supplements(user_id);

@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import ScreeningDetail from './ScreeningDetail';
-import { screeningExample } from '../data/screeningExample';
 import {
   Search,
   Filter,
@@ -17,7 +16,10 @@ import {
 } from 'lucide-react';
 import { questionnaireCatalog, type PersonalScreeningRecord } from '../data/mockData';
 import { questionnaires } from '../data/questionnaireData';
-import { getScreeningRecords, submitScreening } from '../services/mockApi';
+import { getScreeningRecords, saveScreeningRetrieval, submitScreening } from '../services/mockApi';
+import { api } from '../services/api';
+import { loadFirstRunEvidence, toRetrievalSnapshot } from '../services/firstRunRetrieval';
+import { getCurrentSession } from '../auth/session';
 import AlertBadge from '../components/AlertBadge';
 import StatusBadge from '../components/StatusBadge';
 import QuestionnaireForm from '../components/QuestionnaireForm';
@@ -26,7 +28,6 @@ type AlertLevel = 'green' | 'yellow' | 'orange' | 'red';
 
 export default function Screening() {
   const [params, setParams] = useSearchParams();
-  const showExample = params.get('example') === '1';
   const selectedId = params.get('record');
   // ?paper=PHQ-9 时直接打开该量表的作答表单（多模态采集页的量表卡片跳到这里）
   const paperParam = params.get('paper');
@@ -37,6 +38,8 @@ export default function Screening() {
   const [infoQuestionnaire, setInfoQuestionnaire] = useState<string | null>(null);
   const [localRecords, setLocalRecords] = useState<PersonalScreeningRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  const [kgSyncMsg, setKgSyncMsg] = useState<string | null>(null);
+  const userId = getCurrentSession()?.username ?? 'demo_user';
 
   const fetchRecords = useCallback(async () => {
     try {
@@ -80,7 +83,10 @@ export default function Screening() {
 
   const selectedInfo = questionnaires.find((item) => item.id === infoQuestionnaire);
 
-  const records = showExample ? [screeningExample, ...localRecords] : localRecords;
+  /* 只列真实历史记录，全部汇总在一起。
+     原先用 ?example=1 往列表头部插一条示例记录，和真实记录混在同一张表里，
+     再靠"示例记录"标签区分 —— 用户要求不区分，直接去掉这套。 */
+  const records = localRecords;
   const selectedRecord = records.find(record => record.id === selectedId) ?? (savedRecord?.id === selectedId ? savedRecord : undefined);
   const filtered = records.filter(
     (record) =>
@@ -88,15 +94,26 @@ export default function Screening() {
       (filterLevel === 'all' || record.level === filterLevel)
   );
 
-  const handleComplete = async (score: number, maxScore: number, level: AlertLevel) => {
+  /* 合并要点：团队 main 给 onComplete 加了第 4 个参数 answers（答卷逐题得分要一起落库，
+     供分析依据里的检索用），我们这版则负责"提交成功先本地存一份再跳详情"。
+     两边都留：answers 透传给 submitScreening，保存与跳转逻辑仍走我们这版。 */
+  const handleComplete = async (
+    score: number,
+    maxScore: number,
+    level: AlertLevel,
+    answers: Record<string, number>,
+  ) => {
+    let recordId: string | null = null;
     try {
       const response = await submitScreening({
         questionnaire: activeQuestionnaire!,
         score,
         maxScore,
         level,
+        answers,
       });
       if (response.status !== 'success') throw new Error('筛查尚未保存，请重试');
+      recordId = response.id;
       setSavedRecord({ id: response.id, questionnaire: activeQuestionnaire!, score, maxScore, level, status: 'completed', moodTag: '已完成', date: new Date().toLocaleDateString('sv-SE') });
       setParams({ record: response.id });
     } catch (e) {
@@ -106,6 +123,46 @@ export default function Screening() {
     setActiveQuestionnaire(null);
     // 重新从后端拉取（真实模式下后端会生成筛查记录与分级预警）
     await fetchRecords();
+
+    /* 本次「检索与解释」的快照写进这条记录（L1：只存在浏览器本地）。
+       与首次引导 02 提交走的是同一套：拿不到就存 unavailable，不编造。
+       写完再刷一次列表，这样马上打开详情也能看到这一块。 */
+    if (recordId) {
+      const id = recordId;
+      void loadFirstRunEvidence(userId)
+        .then((evidence) => saveScreeningRetrieval(id, toRetrievalSnapshot(evidence)))
+        .catch(() =>
+          saveScreeningRetrieval(id, {
+            at: new Date().toISOString(),
+            mode: 'unavailable',
+            reason: '检索服务暂不可用',
+          }),
+        )
+        .then(() => fetchRecords())
+        .catch(() => undefined);
+    }
+
+    // 量表得分自动回写个人 KG（失败静默，不阻塞 UI）
+    if (activeQuestionnaire) {
+      api.submitScaleScore(userId, activeQuestionnaire, score, true)
+        .then((r) => {
+          /* 「写入图谱」与「给出风险评估」是两件事：Neo4j 未连接时 written=0（确实没写进去），
+             但后端 mock 通路仍能返回一份模板报告。分开放两句话说，别混成一句"已写入"。 */
+          if (r.written > 0) {
+            setKgSyncMsg(
+              r.inference_triggered && r.report
+                ? `已写入知识图谱，最新风险评估：${r.report.risk_label}（综合分 ${r.report.overall_score}）`
+                : '量表得分已写入个人知识图谱',
+            );
+          } else if (r.inference_triggered && r.report) {
+            setKgSyncMsg(
+              `量表得分未写入知识图谱（Neo4j 未连接）；已按演示模板给出风险评估：${r.report.risk_label}`,
+            );
+          }
+        })
+        .catch(() => setKgSyncMsg('量表得分写入知识图谱失败（Neo4j 未连接？），不影响本地记录'));
+      setTimeout(() => setKgSyncMsg(null), 8000);
+    }
   };
 
   if (activeQuestionnaire) {
@@ -117,7 +174,7 @@ export default function Screening() {
             setActiveQuestionnaire(null);
             // 清掉 ?paper=，避免刷新后又被自动打开
             if (paperParam) {
-              setParams(showExample ? { example: '1' } : {}, { replace: true });
+              setParams({}, { replace: true });
             }
           }}
           onComplete={handleComplete}
@@ -126,11 +183,18 @@ export default function Screening() {
     );
   }
 
-  if (selectedRecord) return <ScreeningDetail record={selectedRecord} isExample={showExample && selectedRecord.id === screeningExample.id} onBack={() => setParams(showExample ? { example: '1' } : {})} />;
+  if (selectedRecord) return <ScreeningDetail record={selectedRecord} onBack={() => setParams({}, { replace: true })} />;
   if (selectedId) return <div className="ui-card p-6"><p className="text-sm text-slate-500">{loading ? '正在加载筛查详情…' : '未找到该筛查记录，请返回列表重试。'}</p><button className="ui-button mt-4" onClick={() => setParams({})}>返回筛查记录</button></div>;
 
   return (
     <div className="space-y-6">
+      {/* 量表回写知识图谱的结果提示（团队 main 的功能）：容器换成 .ui-card，
+          内层配色改走令牌，深色下不再是一块固定的浅绿。 */}
+      {kgSyncMsg && (
+        <div className="ui-card flex items-center gap-2 px-4 py-2.5 text-sm text-slate-600">
+          <ClipboardCheck className="w-3.5 h-3.5 shrink-0 text-primary-500" /> {kgSyncMsg}
+        </div>
+      )}
       <div className="ui-card p-5">
         <h3 className="text-base font-semibold text-slate-800">筛查说明</h3>
         <p className="text-sm text-slate-500 mt-2 leading-6">
@@ -304,9 +368,7 @@ export default function Screening() {
       {/* Toolbar */}
       <div className="ui-card flex flex-wrap items-center justify-between gap-3 p-5">
         <div><h3 className="font-semibold text-slate-800">我的筛查记录</h3><p className="mt-1 text-sm text-slate-500">完成筛查后，点击下方记录的“查看详情”，回看得分、解释和建议。</p></div>
-        <button className="ui-button" onClick={() => setParams(showExample ? {} : { example: '1' })}>{showExample ? '退出示例' : '模拟完成后的记录'}</button>
       </div>
-      {showExample && <p role="status" className="rounded-xl bg-primary-50 p-4 text-sm text-primary-700">已展示一条 PHQ-9 示例记录（8/27 分）。点击“查看详情”体验报告；示例不会保存为真实记录。</p>}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
         <div className="flex flex-wrap gap-3 items-center">
           <div className="relative">
@@ -358,7 +420,7 @@ export default function Screening() {
           <tbody className="divide-y divide-slate-100">
             {filtered.map((record) => (
               <tr key={record.id} className="hover:bg-slate-50 transition-colors">
-                <td className="px-5 py-3.5 text-sm font-mono text-slate-500">{record.id === screeningExample.id ? '示例记录' : record.id}</td>
+                <td className="px-5 py-3.5 text-sm font-mono text-slate-500">{record.id}</td>
                 <td className="px-5 py-3.5 text-sm text-slate-600">{record.questionnaire}</td>
                 <td className="px-5 py-3.5">
                   <div className="flex items-center gap-2">
@@ -380,7 +442,7 @@ export default function Screening() {
                 <td className="px-5 py-3.5"><StatusBadge status={record.status} /></td>
                 <td className="px-5 py-3.5 text-sm text-slate-600">{record.moodTag}</td>
                 <td className="px-5 py-3.5 text-sm text-slate-500">{record.date}</td>
-                <td className="px-5 py-3.5"><button className="whitespace-nowrap text-sm font-medium text-primary-600 hover:underline" onClick={() => setParams({ ...(showExample ? { example: '1' } : {}), record: record.id })}>查看详情</button></td>
+                <td className="px-5 py-3.5"><button className="whitespace-nowrap text-sm font-medium text-primary-600 hover:underline" onClick={() => setParams({ record: record.id })}>查看详情</button></td>
               </tr>
             ))}
           </tbody>

@@ -19,6 +19,35 @@ export interface QuestionnaireItem {
   target: string;
 }
 
+/**
+ * 本次筛查的「检索与解释」快照（L1：只存在浏览器本地，不落库）。
+ *
+ * 为什么要有它：推理/RAG 结果以前只在 03 结果页当场看得到，回到「我的档案」
+ * 就只剩分数了。用户 2026-10-14 选定 L1 后，把提交那一刻拿到的东西原样存进记录里，
+ * 之后回看能对上当时的口径（服务端真实 / 演示模板 / 没拿到）。
+ * 没拿到就存 mode='unavailable' + 原因，绝不补默认值。
+ */
+export interface ScreeningRetrievalSnapshot {
+  /** 快照时间（ISO） */
+  at: string;
+  /** live=服务端真实推理；mock=服务端演示模式（模板生成）；unavailable=本次没拿到 */
+  mode: 'live' | 'mock' | 'unavailable';
+  /** mode='unavailable' 时的原因，原样保留接口/网络给的说法 */
+  reason?: string;
+  /** 命中的相似线索（后端 matched_disorders 原样存，最多留 5 条） */
+  matches?: {
+    name: string;
+    score: number;
+    coverage?: number;
+    matched_symptoms?: string[];
+    matched_triggers?: string[];
+  }[];
+  /** 报告正文（后端 summary） */
+  summary?: string;
+  /** 建议与它的由来（后端 recommendations 的 name + reason） */
+  advice?: string[];
+}
+
 export interface PersonalScreeningRecord {
   id: string;
   questionnaire: string;
@@ -28,6 +57,34 @@ export interface PersonalScreeningRecord {
   status: 'completed' | 'pending';
   moodTag: string;
   date: string;
+  /** 逐题作答（题号 → 选项分值）。后端接口以前只回总分，所以是可选的 */
+  answers?: Record<number, number>;
+  /** 用户自愿补充的一条记录（文字 / 语音 / 图片） */
+  supplement?: {
+    kind: 'text' | 'audio' | 'image';
+    text?: string;
+    filename?: string;
+    url?: string;
+    /**
+     * 音频/图片补充的分析描述（上传时由后端或演示引擎返回，例如
+     * "对…的模拟分析完成：已完成哈希编码…"）。首页「最近一次输入」与检索页
+     * 历史记录都优先展示它；没有就如实回退成文件名，不编造特征描述。
+     */
+    description?: string;
+    /**
+     * 哈希检索引擎的分析报告（保存补充时后端同步生成；随记录一起返回）。
+     * 首页「最近一次输入」用它展示风险等级与结论；早期数据可能没有。
+     */
+    analysis?: {
+      level: 'green' | 'yellow' | 'orange' | 'red';
+      levelLabel?: string;
+      conclusion?: string;
+      reason?: string;
+      alertId?: string | null;
+    };
+  };
+  /** 提交时存下的检索/RAG 快照（L1：浏览器本地） */
+  retrieval?: ScreeningRetrievalSnapshot;
 }
 
 export type ScreeningRecord = PersonalScreeningRecord;

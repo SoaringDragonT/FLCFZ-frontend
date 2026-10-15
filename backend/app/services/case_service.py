@@ -2,6 +2,7 @@
 from typing import Optional
 import uuid
 
+from app.core.dates import format_dt
 from app.db import database as db
 
 
@@ -49,7 +50,8 @@ async def get_cases(page: int = 1, page_size: int = 10, alert_level: Optional[st
 
 
 def _fmt_date(v):
-    return v.strftime("%Y-%m-%d") if hasattr(v, "strftime") and v else (v or None)
+    """None 兜底（而不是空串）—— 由 app.core.dates 统一实现，见那里的说明。"""
+    return format_dt(v, fallback=None)
 
 
 async def _case_to_dict(r: dict) -> dict:
@@ -80,13 +82,13 @@ async def get_case_by_id(case_id: int) -> Optional[dict]:
 
 
 async def create_case(data: dict) -> dict:
-    case_id = generate_case_id()
+    case_id = await generate_case_id()
     row_id = await db.execute_a(
-        "INSERT INTO cases (case_id, name, age, gender, department, phone, id_number, "
+        "INSERT INTO cases (case_id, user_id, name, age, gender, department, phone, id_number, "
         "alert_level, status, counselor_id, notes, screening_count, last_screening_date, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, 'green', 'active', ?, ?, ?, ?, CURRENT_TIMESTAMP)",
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'green', 'active', ?, ?, ?, ?, CURRENT_TIMESTAMP)",
         (
-            case_id, data.get("name"), data.get("age"), data.get("gender"),
+            case_id, data.get("user_id"), data.get("name"), data.get("age"), data.get("gender"),
             data.get("department"), data.get("phone"), data.get("id_number"),
             data.get("counselor_id"), data.get("notes"), data.get("screening_count", 0),
             data.get("last_screening_date"),
@@ -111,6 +113,28 @@ async def create_case(data: dict) -> dict:
     except Exception:
         pass
     return await get_case_by_id(row_id)
+
+
+async def sync_personal_case(user_id: int, screening: dict) -> None:
+    """按账号维护档案统计；不通过姓名匹配旧档案。"""
+    case = await db.query_one_a("SELECT id FROM cases WHERE user_id = ?", (user_id,))
+    if not case:
+        await create_case({
+            "user_id": user_id, "name": screening["name"],
+            "age": screening.get("age"), "gender": screening.get("gender"),
+            "department": screening.get("department"),
+        })
+        case = await db.query_one_a("SELECT id FROM cases WHERE user_id = ?", (user_id,))
+    count = await db.query_one_a(
+        "SELECT COUNT(*) AS c FROM screenings WHERE user_id = ?", (user_id,))
+    latest = await db.query_one_a(
+        "SELECT alert_level, screening_date FROM screenings WHERE user_id = ? "
+        "ORDER BY created_at DESC, id DESC LIMIT 1", (user_id,))
+    await db.execute_a(
+        "UPDATE cases SET screening_count = ?, last_screening_date = ?, "
+        "alert_level = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        (count["c"], latest["screening_date"], latest["alert_level"], case["id"]),
+    )
 
 
 async def update_case(case_id: int, data: dict) -> Optional[dict]:

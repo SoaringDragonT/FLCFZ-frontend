@@ -1,5 +1,5 @@
 import { ArrowLeft, ClipboardCheck } from 'lucide-react';
-import type { ScreeningRecord } from '../data/mockData';
+import type { ScreeningRecord, ScreeningRetrievalSnapshot } from '../data/mockData';
 import { questionnaires } from '../data/questionnaireData';
 import { exampleAnswers } from '../data/screeningExample';
 
@@ -7,6 +7,109 @@ interface Props {
   record: ScreeningRecord;
   onBack: () => void;
   isExample?: boolean;
+}
+
+/**
+ * 「本次检索与解释」：提交这条记录时存下来的检索/RAG 快照（L1：浏览器本地）。
+ *
+ * 三种来源分开写清楚，回看时不会被误导：
+ *   live        服务端真实推理 —— 展示命中的相似线索、报告正文与建议依据
+ *   mock        服务端演示模式（模板生成）—— 同样展示，但明确标注演示
+ *   unavailable 本次没拿到 —— 只写原因，不补默认内容
+ * 快照里没有的部分一律不渲染（不猜、不补）。
+ */
+function RetrievalSnapshotSection({ snapshot }: { snapshot: ScreeningRetrievalSnapshot }) {
+  const modeLabel =
+    snapshot.mode === 'live'
+      ? { text: '服务端检索', className: 'bg-primary-50 text-primary-600' }
+      : snapshot.mode === 'mock'
+        ? { text: '演示模式 · 模板生成', className: 'bg-slate-100 text-slate-500' }
+        : { text: '未取得检索结果', className: 'bg-slate-100 text-slate-500' };
+  const at = snapshot.at ? snapshot.at.slice(0, 16).replace('T', ' ') : '';
+  const matches = snapshot.matches ?? [];
+  const advice = snapshot.advice ?? [];
+
+  return (
+    <section className="ui-card p-6">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <h3 className="font-semibold text-slate-800">本次检索与解释</h3>
+        <span className={`rounded-full px-2 py-0.5 text-[11px] ${modeLabel.className}`}>
+          {modeLabel.text}
+        </span>
+        {at && <span className="text-xs text-slate-400">{at}</span>}
+      </div>
+      <p className="mt-2 text-xs leading-5 text-slate-500">
+        提交这条记录时一并存下的检索快照（存在本机浏览器，刷新或重开浏览器仍在）。
+      </p>
+
+      {snapshot.mode === 'unavailable' ? (
+        <p className="mt-4 rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+          本次没有取得检索与解释内容{snapshot.reason ? `：${snapshot.reason}` : ''}。
+        </p>
+      ) : (
+        <div className="mt-4 space-y-4">
+          {matches.length > 0 && (
+            <div>
+              <p className="text-[13px] font-medium text-slate-700">命中的相似线索</p>
+              <div className="mt-2 space-y-2">
+                {matches.map((row) => (
+                  <div key={row.name} className="rounded-xl bg-slate-50 px-3.5 py-2.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-sm font-medium text-slate-800">{row.name}</span>
+                      <span className="rounded-full bg-white px-2 py-0.5 text-[11px] text-slate-500">
+                        相似度 {row.score}
+                      </span>
+                      {typeof row.coverage === 'number' && (
+                        <span className="text-[11px] text-slate-400">
+                          覆盖 {Math.round(row.coverage * 100)}%
+                        </span>
+                      )}
+                    </div>
+                    {(row.matched_symptoms?.length ?? 0) > 0 && (
+                      <p className="mt-1 text-xs leading-5 text-slate-500">
+                        匹配症状：{row.matched_symptoms?.join('、')}
+                      </p>
+                    )}
+                    {(row.matched_triggers?.length ?? 0) > 0 && (
+                      <p className="mt-0.5 text-xs leading-5 text-slate-500">
+                        匹配诱因：{row.matched_triggers?.join('、')}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {snapshot.summary && (
+            <div>
+              <p className="text-[13px] font-medium text-slate-700">当时的报告正文</p>
+              <p className="mt-1.5 whitespace-pre-wrap text-sm leading-6 text-slate-600">
+                {snapshot.summary}
+              </p>
+            </div>
+          )}
+
+          {advice.length > 0 && (
+            <div>
+              <p className="text-[13px] font-medium text-slate-700">当时的建议与由来</p>
+              <ul className="mt-1.5 list-disc space-y-1 pl-5 text-sm leading-6 text-slate-600">
+                {advice.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {matches.length === 0 && !snapshot.summary && advice.length === 0 && (
+            <p className="rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-600">
+              这次快照里没有留下可展示的检索内容。
+            </p>
+          )}
+        </div>
+      )}
+    </section>
+  );
 }
 
 export default function ScreeningDetail({ record, onBack, isExample = false }: Props) {
@@ -33,6 +136,31 @@ export default function ScreeningDetail({ record, onBack, isExample = false }: P
           <p className="mt-2 text-sm leading-6 text-slate-500">{definition?.introduction.recallPeriod} 总分反映量表所评估问题的整体程度，不能单凭分数判断你有哪些具体症状，也不等同于医学诊断。</p>
         </div>
       </section>
+      {record.supplement && (
+        <section className="ui-card p-6">
+          <h3 className="font-semibold text-slate-800">本次补充记录</h3>
+          <p className="mt-2 text-xs leading-5 text-slate-500">
+            这次筛查时你自愿补充的内容，仅用于本次分析。
+          </p>
+          <div className="mt-4 rounded-xl bg-slate-50 p-4 text-sm leading-7 text-slate-700">
+            {record.supplement.kind === "text" ? (
+              <p className="whitespace-pre-wrap">{record.supplement.text}</p>
+            ) : record.supplement.kind === "image" && record.supplement.url ? (
+              <img
+                src={record.supplement.url}
+                alt={record.supplement.filename ?? "补充图片"}
+                className="max-h-64 rounded-lg object-contain"
+              />
+            ) : (
+              <p>{record.supplement.filename ?? "语音片段"}（已随本次筛查保存）</p>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* 本次检索与解释：L1 快照（提交时一起存在浏览器本地） */}
+      {record.retrieval && <RetrievalSnapshotSection snapshot={record.retrieval} />}
+
       <div className="grid gap-5 lg:grid-cols-2">
         <section className="ui-card p-5">
           <h3 className="font-semibold text-slate-800">相关表现与关注点</h3>
@@ -54,6 +182,21 @@ export default function ScreeningDetail({ record, onBack, isExample = false }: P
         {isExample && definition?.id === 'PHQ-9' ? (
           <div className="mt-4 divide-y divide-slate-100">
             {definition.questions.map((q, index) => <div key={q.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm"><span className="text-slate-700">{q.id}. {q.text}</span><span className="shrink-0 text-slate-500">{q.options.find(o => o.value === exampleAnswers[index])?.label} · {exampleAnswers[index]} 分</span></div>)}
+          </div>
+        ) : record.answers && definition ? (
+          /* 有逐题答案就照实回看（首次引导流程会把它一起存下来） */
+          <div className="mt-4 divide-y divide-slate-100">
+            {definition.questions.map((q) => {
+              const value = record.answers?.[q.id];
+              return (
+                <div key={q.id} className="flex flex-wrap items-center justify-between gap-3 py-3 text-sm">
+                  <span className="text-slate-700">{q.id}. {q.text}</span>
+                  <span className="shrink-0 text-slate-500">
+                    {value === undefined ? '未作答' : `${q.options.find(o => o.value === value)?.label} · ${value} 分`}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         ) : <p className="mt-3 text-sm leading-6 text-slate-500">当前记录接口仅提供总分，暂时无法回看逐题答案。这里不会根据总分推测你的作答。</p>}
       </section>

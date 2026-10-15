@@ -18,12 +18,15 @@ import {
 } from "recharts";
 import { Link } from "react-router-dom";
 import {
-  getAdminAlerts,
   getAdminDashboardData,
   getDashboardStats,
   type AdminDashboardResponse,
   type DashboardStats,
 } from "../../services/mockApi";
+/* 预警处置概览用的是分页接口 /api/admin/alerts，返回 { items, total, page, pageSize }
+   信封而不是裸数组。以前这里用 mockApi.getAdminAlerts()（按数组返回），
+   下面 alerts.filter() 就抛 "alerts.filter is not a function"，整页白屏。 */
+import { listAdminAlerts } from "../../services/adminApi";
 import { type AlertRecord } from "../data/adminMockData";
 import {
   ChartRange,
@@ -57,9 +60,9 @@ export default function AdminDashboard() {
       })
       .catch(() => {});
     // 预警处置概览用的原始记录（与管理端预警页同一个接口，不新增后端依赖）
-    getAdminAlerts()
-      .then((rows) => {
-        if (active) setAlerts(rows);
+    listAdminAlerts({})
+      .then((page) => {
+        if (active) setAlerts(page.items);
       })
       .catch(() => {});
     return () => {
@@ -77,15 +80,20 @@ export default function AdminDashboard() {
     );
   if (!data) return <DashboardLoading />;
   // 预警处置概览：由预警记录聚合（状态分布 + 处理人分布）
+  /* 「未分配」的判定：后端对没有处理人的预警，assignee 字段填的是哨兵值
+     「未分配」而非空串（见 backend _admin_alert_dict 的
+     assignee_name or "未分配"），早期只判空串导致指标恒为 0
+     （2026-10-14 修复：库里 45 条未分配曾显示 0）。 */
+  const isUnassigned = (a: AlertRecord) => !a.assignee || a.assignee === "未分配";
   const alertStats = {
     pending: alerts.filter((a) => a.status === "pending").length,
     processing: alerts.filter((a) => a.status === "processing").length,
     resolved: alerts.filter((a) => a.status === "resolved").length,
     // 没有任何处理人的预警：唯一一个「需要立刻认领」的信号
-    unassigned: alerts.filter((a) => !a.assignee).length,
+    unassigned: alerts.filter(isUnassigned).length,
     byAssignee: Object.entries(
       alerts.reduce<Record<string, number>>((acc, a) => {
-        if (!a.assignee) return acc;
+        if (isUnassigned(a)) return acc;
         acc[a.assignee] = (acc[a.assignee] ?? 0) + 1;
         return acc;
       }, {})
@@ -221,17 +229,17 @@ export default function AdminDashboard() {
                     />
                   </linearGradient>
                 </defs>
-                <CartesianGrid vertical={false} stroke="#f2f4f7" />
+                <CartesianGrid vertical={false} className="chart-grid" />
                 <XAxis
                   dataKey="date"
-                  tick={{ fontSize: 11, fill: "#98a2b3" }}
+                  tick={{ fontSize: 12, fill: "#98a2b3" }}
                   axisLine={false}
                   tickLine={false}
                   dy={10}
                   minTickGap={24}
                 />
                 <YAxis
-                  tick={{ fontSize: 11, fill: "#98a2b3" }}
+                  tick={{ fontSize: 12, fill: "#98a2b3" }}
                   axisLine={false}
                   tickLine={false}
                   allowDecimals={false}

@@ -7,6 +7,10 @@
 # ---- Node / 前端 ----
 node_modules/
 frontend/dist/
+# 单文件打包产物（vite.singlefile.config.ts 的输出，用于"双击打开/发到手机上"）。
+# 是生成物不是源码：每次构建都变，进库只制造噪音。
+# 配置本身（vite.singlefile.config.ts）要跟踪，产物不要。
+frontend/dist-single/
 frontend/.vite/
 npm-debug.log*
 yarn-error.log*
@@ -95,3 +99,23 @@ backend/data/hashing/hashing_state.json
 # 本地 Node 运行时（为跑 dev server 下载，不入库）
 .tools/
 .shots/
+
+# ---- 本地产物 / 临时目录（不入库）----
+# 这三个都是本机生成的工作产物，体积大且与提交无关：
+#   distribution/ 是给竞赛提交用的打包（含 65MB 代码归档 zip）
+#   output/       是导出 PDF 等中间产物
+#   tmp/          是临时脚本
+distribution/
+output/
+tmp/
+
+# 开发过程截图归档：目录本身要入库（只放各批次的 索引.md 与 README），
+# 图片文件已被上面的 *.png/*.jpg 全局规则忽略，因此这里不再整目录忽略。
+# docs/screenshots/
+
+# 本机专用脚本：内含本机绝对路径 / 用于把 token 写进本机钥匙串，不入库
+存储token.command
+
+# 设计稿演示工程的依赖，不入库
+design/home-react/node_modules/
+frontend/dist-app/
