@@ -1,10 +1,28 @@
 apply plugin: 'com.android.application'
+/* Chaquopy 只在需要时启用（构建时加 -Pchaquopy）。
+   不这样做的话，离线版和连后端版也会被打进 37 MB 用不到的 Python 运行时
+   —— 实测三个包全变成 44 MB，而离线版本来就该是 7 MB 左右。 */
+def withChaquopy = project.hasProperty("chaquopy")
+if (withChaquopy) {
+    apply plugin: 'com.chaquo.python'
+}
 
 android {
     namespace "com.dachuang.psychscreen"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "com.dachuang.psychscreen"
+
+        /* Chaquopy 强制要求显式声明 ABI（否则配置阶段直接报
+             "Chaquopy requires ndk.abiFilters"）。
+           只出 arm64-v8a + x86_64：
+             · 真机手机都是 arm64；
+            真机（手机）全都是 arm64；
+           去掉 x86_64 与 armeabi-v7a 后，Python 运行时 + numpy/Pillow 的
+           原生库都只打一份，实测省约 24 MB。 */
+        if (withChaquopy) {
+            ndk { abiFilters "arm64-v8a" }
+        }
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         /* versionCode 必须**大于**团队已发布的 mobile-v1.0.2（那个是 3）。
@@ -56,4 +74,22 @@ try {
     }
 } catch(Exception e) {
     logger.info("google-services.json not found, google-services plugin not applied. Push Notifications won't work")
+}
+
+/* Chaquopy：把 Python 运行时打进 APK。
+   注意块名是 chaquopy，不是 python —— python 是 Chaquopy 14 之前的废弃 DSL，
+   15 起被移除。用旧名字的表现是：apply plugin 不报错，但块找不到方法：
+     Could not find method python() ... on project ':app'  （实测踩过两次）
+   第一步只验证工具链，先不装第三方包。 */
+if (withChaquopy) {
+    chaquopy {
+        defaultConfig {
+            version = "3.11"
+            pip {
+                install "numpy"
+                install "pillow"
+                install "sqlalchemy"
+            }
+        }
+    }
 }
