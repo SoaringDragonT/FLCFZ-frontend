@@ -424,6 +424,9 @@ html.theme-switching *::after {
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
+    /* 导航可滚动时，底边用 16px 渐隐收尾：否则最后一项会被下方入口卡
+       齐刷刷切掉半个字，看着像卡片压住了导航。 */
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 16px), transparent);
   }
   .app-shell[data-collapsed="true"] .sidebar-label {
     display: none;
@@ -451,30 +454,6 @@ html.theme-switching *::after {
     /* 侧栏选中项：浅色下用 primary-600，在 primary-50 底上约 5.9:1（primary-500 只有 4.34） */
     color: var(--color-primary-600);
   }
-  /* 侧边栏底部的操作按钮：切换主题、收起/展开侧栏。
-     刻意做成「带边框的方形按钮」，与不带底框的导航图标区分开，
-     让人一眼看出这是控制类按钮而不是跳转页面的。 */
-  .sidebar-action {
-    display: inline-flex;
-    flex-shrink: 0;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    border: 1px solid var(--color-slate-200);
-    border-radius: 0.625rem;
-    background: var(--color-white);
-    color: var(--color-slate-500);
-    transition:
-      background 150ms,
-      border-color 150ms,
-      color 150ms;
-  }
-  .sidebar-action:hover {
-    border-color: var(--color-primary-200);
-    background: var(--color-primary-50);
-    color: var(--color-primary-500);
-  }
   .sidebar-footer {
     display: flex;
     flex-shrink: 0;
@@ -487,21 +466,9 @@ html.theme-switching *::after {
     color: var(--color-slate-500);
     font-size: 12px;
   }
-  /* 展开态页脚不放「折叠侧栏」按钮：侧栏右缘的悬浮把手（.sidebar-handle）
-     已经能收起侧栏，同一个动作不必在侧栏里出现两次。
-     页脚因此只剩一句版权文字，天然居中。 */
-  .sidebar-footer .sidebar-action-collapse {
-    display: none;
-  }
-  /* 收起态把手会隐藏（见 .app-shell[data-collapsed] .sidebar-handle），
-     这时把页脚那个「展开侧栏」按钮放出来并居中 */
-  .app-shell[data-collapsed="true"] .sidebar-footer {
-    margin-top: auto;
-    padding: 0.75rem 0;
-  }
-  .app-shell[data-collapsed="true"] .sidebar-footer .sidebar-action-collapse {
-    display: inline-flex;
-  }
+  /* 页脚只留一句版权文字。折叠/展开统一由侧栏右缘、竖直居中的把手完成：
+     之前"展开"箭头在页脚、"折叠"箭头在中缝，同一个开关的两个方向落在
+     两个位置，用户要来回找（评审意见第 4 条）。 */
   .app-shell[data-collapsed="true"] .sidebar-link {
     justify-content: center;
   }
@@ -829,10 +796,10 @@ html.theme-switching *::after {
   display: none;
 }
 
-/* 收起后不再悬浮"展开"把手（那个方向交给顶栏的 ☰ 按钮），
-   避免在全屏/高窗口下浮在中缝上显得别扭 */
+/* 收起后把手留在原处（竖直居中、贴侧栏右缘），图标换成向右的展开箭头：
+   开与关始终是同一个按钮、同一个位置。 */
 .app-shell[data-collapsed="true"] .sidebar-handle {
-  display: none;
+  opacity: 1;
 }
 
 /* 收起后三组图标连成一列等距：组间距与组内 space-y-1.5(6px) 一致 */
@@ -844,10 +811,6 @@ html.theme-switching *::after {
 @media (max-width: 1023px) {
   .app-shell[data-collapsed="true"] .sidebar-group-title {
     display: flex;
-  }
-  /* 抽屉形态下不需要"收起侧栏"按钮（抽屉自带关闭按钮） */
-  .sidebar-action-collapse {
-    display: none;
   }
 }
 

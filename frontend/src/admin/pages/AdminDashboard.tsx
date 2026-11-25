@@ -121,18 +121,20 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <TodayWork />
       <CurrentRiskPopulation />
       {/* 注：顶部「待处理预警 / 本月完成率」等指标及其变化幅度目前是前端常量，
           未接入 /api/dashboard/stats；下方趋势与分布来自真实聚合查询。 */}
       {/* 首行按「要做的 → 风险总量 → 整体进度」排序：
           未分配预警（需立刻认领）→ 本月预警（黄/红总量）→ 本月完成率（进展） */}
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 items-stretch gap-5 sm:grid-cols-2 xl:grid-cols-3">
         <MetricCard
           label="未分配预警"
           value={alerts.length === 0 ? "—" : String(alertStats.unassigned)}
           icon={AlertTriangle}
+          valueClassName={alertStats.unassigned > 0 ? "text-warning-700" : undefined}
+          iconClassName={alertStats.unassigned > 0 ? "bg-warning-50 text-warning-600" : undefined}
           hint={
             alerts.length === 0
               ? "暂无预警记录"
@@ -150,12 +152,12 @@ export default function AdminDashboard() {
             </Link>
           }
         />
-        <section className="ui-card p-5 xl:p-6">
+        <section className="ui-card flex h-full flex-col p-5 xl:p-6">
           <PanelHeading
             title="本月预警"
             description="按触发时间统计黄色与红色预警"
           />
-          <div className="space-y-4" role="img" aria-label={`本月黄色预警 ${monthlyAlerts.yellow} 条，红色预警 ${monthlyAlerts.red} 条`}>
+          <div className="mt-auto space-y-4" role="img" aria-label={`本月黄色预警 ${monthlyAlerts.yellow} 条，红色预警 ${monthlyAlerts.red} 条`}>
             {monthlyAlertBars.map((item) => (
               <div key={item.label}>
                 <div className="mb-2 flex items-center justify-between text-sm">
@@ -163,7 +165,7 @@ export default function AdminDashboard() {
                     <i className={`h-2.5 w-2.5 rounded-full ${item.dot}`} />
                     {item.label}
                   </span>
-                  <span className="font-semibold tabular-nums text-slate-800">{item.value} 条</span>
+                  <span className="text-base font-semibold tabular-nums text-slate-800">{item.value} 条</span>
                 </div>
                 <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                   <div
@@ -195,7 +197,7 @@ export default function AdminDashboard() {
           }
         />
       </div>
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
         <section className="ui-card p-5 sm:p-6 xl:col-span-2">
           <PanelHeading
             title="筛查趋势"
@@ -337,7 +339,7 @@ export default function AdminDashboard() {
           </div>
         </section>
       </div>
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
         <section className="ui-card overflow-hidden xl:col-span-2">
           <div className="px-6 pt-6">
             <PanelHeading

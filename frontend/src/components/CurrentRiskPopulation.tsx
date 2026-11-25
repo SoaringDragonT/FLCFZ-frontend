@@ -13,5 +13,49 @@ export default function CurrentRiskPopulation(){
     void load();const timer=setInterval(()=>void load(),30000);return()=>{live=false;clearInterval(timer);};
   },[active,token]);
   const data=value.token===token?value.data:undefined;
-  return <section aria-label="当前综合状态人数" className="ui-card p-4"><h3 className="font-semibold text-slate-800">当前综合状态 · 按用户统计</h3><p className="mt-1 text-xs text-slate-500">采用统一近30天评估；历史预警列表保留事件发生时的等级与处置记录。</p>{data?<><div className="mt-3 flex flex-wrap gap-3 text-xs">{Object.entries(riskLabels).map(([level,label])=><span key={level} className="rounded-lg bg-slate-50 px-3 py-2">{label} <strong>{data.distribution[level as RiskLevel] || 0}</strong> 人</span>)}</div><p className="mt-2 text-xs text-slate-500">共{data.people}个有筛查记录的账号；{data.safety_pending_people}人另有待复核安全提示。</p></>:<p className="mt-3 text-xs text-slate-500">{USE_MOCK?'演示模式不生成真实用户风险。':value.error || '正在读取当前综合状态…'}</p>}</section>;
+  return (
+    <section aria-label="当前综合状态人数" className="ui-card p-5 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-slate-800">当前综合状态 · 按用户统计</h2>
+          <p className="mt-1.5 text-xs leading-5 text-slate-500">
+            采用统一近 30 天评估；历史预警保留事件发生时的等级与处置记录。
+          </p>
+        </div>
+        {data && (
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
+            共 {data.people} 个账号
+          </span>
+        )}
+      </div>
+
+      {data ? (
+        <>
+          {/* 五个状态等宽排列，人数用大字号：原来是一串 inline 药丸，
+              标签和数字一样大，"需要关注几人"看不出重点。 */}
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+            {Object.entries(riskLabels).map(([level, label]) => (
+              <div key={level} className="rounded-xl border border-slate-200 bg-slate-50/60 px-3 py-2.5">
+                <p className="text-xs text-slate-500">{label}</p>
+                <p className="mt-1 text-[22px] font-semibold leading-none tabular-nums text-slate-800">
+                  {data.distribution[level as RiskLevel] || 0}
+                  <span className="ml-1 text-xs font-normal text-slate-400">人</span>
+                </p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-slate-500">
+            共 {data.people} 个有筛查记录的账号
+            {data.safety_pending_people > 0 && (
+              <>；<span className="font-medium text-warning-700">{data.safety_pending_people} 人</span>另有待复核安全提示</>
+            )}
+          </p>
+        </>
+      ) : (
+        <p className="mt-3 text-xs text-slate-500">
+          {USE_MOCK ? '演示模式不生成真实用户风险。' : value.error || '正在读取当前综合状态…'}
+        </p>
+      )}
+    </section>
+  );
 }

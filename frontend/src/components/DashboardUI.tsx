@@ -34,7 +34,7 @@ export function MetricCard({
   positive?: boolean;
 }) {
   return (
-    <div className="ui-card p-5 xl:p-6">
+    <div className="ui-card flex h-full flex-col p-5 xl:p-6">
       <div className="mb-5 flex items-start justify-between gap-2">
         <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${iconClassName ?? "bg-slate-100 text-slate-700"}`}>
           <Icon className="h-6 w-6" strokeWidth={1.7} />
@@ -62,7 +62,7 @@ export function MetricCard({
           </span>
         )}
       </div>
-      {hint && <p className="mt-3 text-xs leading-5 text-slate-400">{hint}</p>}
+      {hint && <p className="mt-auto pt-3 text-xs leading-5 text-slate-400">{hint}</p>}
       {encouragement && <p className="mt-4 text-xs leading-6 text-slate-500">{encouragement}</p>}
     </div>
   );

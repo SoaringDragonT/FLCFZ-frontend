@@ -20,8 +20,6 @@ import {
   MessageCircle,
   Moon,
   Network,
-  PanelLeftClose,
-  PanelLeftOpen,
   Rss,
   Search,
   Settings,
@@ -487,42 +485,31 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
             </div>
           ))}
         </nav>
-        {/* 底部说明卡：与卡片同一套圆角与"淡玻璃"底色，
-            在毛玻璃侧栏上不再是一块突兀的实心浅灰块。 */}
-        <div className="sidebar-label mx-5 mb-5 mt-auto shrink-0 rounded-2xl border border-slate-200/70 bg-white/70 p-5 text-center">
-          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
+        {/* 底部入口卡：这张卡原来只有一句话，却长得像能点（评审意见第 4 条：
+            "想点一些什么，但也没有可以点的"）。现在整张卡是一个真实入口，
+            带悬停反馈与右箭头，管理端去预警处置、个人端去心理档案。 */}
+        <Link
+          to={isAdmin ? `${root}/alerts` : `${root}/me/kg`}
+          onClick={closeNavigation}
+          title={isAdmin ? "进入预警研判与处置" : "查看我的心理档案"}
+          className="sidebar-label group mx-5 mb-5 mt-auto shrink-0 rounded-2xl border border-slate-200/70 bg-white/70 p-5 text-center transition-colors hover:border-primary-200 hover:bg-white"
+        >
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-600 transition-colors group-hover:bg-primary-100">
             <ShieldCheck className="h-5 w-5" />
           </div>
-          <p className="text-sm font-semibold text-slate-800">
-            每一份关注，都有意义
+          <p className="text-sm font-semibold text-slate-800">每一份关注，都有意义</p>
+          <p className="mt-2 whitespace-normal text-balance text-xs leading-5 text-slate-500">
+            {isAdmin ? "从筛查到跟进，让关怀及时抵达。" : "从了解自己开始，照顾好每一天。"}
           </p>
-          <p className="mt-2 whitespace-normal text-xs leading-5 text-slate-500">
-            {isAdmin
-              ? "从筛查到跟进，让关怀及时抵达。"
-              : "从了解自己开始，照顾好每一天。"}
-          </p>
-        </div>
+          <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary-600">
+            {isAdmin ? "进入预警研判" : "查看心理档案"}
+            <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+          </span>
+        </Link>
         <div className="sidebar-footer">
           <span className="sidebar-label">
             心理健康 · {isAdmin ? "管理工作空间" : "个人健康空间"}
           </span>
-
-          {/* 只在收起态出现：展开态收起侧栏交给右缘的悬浮把手，
-              页脚因此只剩左侧那句居中的版权文字 */}
-          <button
-            type="button"
-            onClick={() => setCollapsed(!collapsed)}
-            aria-label={collapsed ? "展开侧栏" : "折叠侧栏"}
-            aria-expanded={!collapsed}
-            title={collapsed ? "展开侧栏" : "折叠侧栏"}
-            className="sidebar-action sidebar-action-collapse"
-          >
-            {collapsed ? (
-              <PanelLeftOpen className="h-5 w-5" strokeWidth={1.7} />
-            ) : (
-              <PanelLeftClose className="h-5 w-5" strokeWidth={1.7} />
-            )}
-          </button>
         </div>
       </aside>
       <button
