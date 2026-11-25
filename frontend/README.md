@@ -11,6 +11,8 @@
 
 两个后端就绪后，可在本目录运行 `npm run dev:desktop` 或 `npm run dev:mobile` 打开对应入口。运行 `npm run build:single` 生成离线演示包。
 
+目录划分、路由与页面对照、数据分层与「新增代码放哪」见 [STRUCTURE.md](./STRUCTURE.md)。
+
 ## React Compiler
 
 The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
