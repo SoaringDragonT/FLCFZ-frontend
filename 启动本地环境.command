@@ -189,8 +189,8 @@ say ""
 IP="$(ipconfig getifaddr en0 2>/dev/null || echo '')"
 say "────────────────────────────────────────────────────────"
 say "${G}访问地址${N}"
-say "  电脑：  ${B}http://127.0.0.1:$FE_PORT/${N}"
-[ -n "$IP" ] && say "  手机：  ${B}http://$IP:$FE_PORT/${N}   ${D}（需同一个 WiFi）${N}"
+say "  电脑：  ${B}http://127.0.0.1:$FE_PORT/?client=desktop${N}"
+[ -n "$IP" ] && say "  手机：  ${B}http://$IP:$FE_PORT/?client=mobile${N}   ${D}（需同一个 WiFi）${N}"
 say ""
 say "${D}演示账号：xiaoyu / 123456　　管理端：admin / admin123${N}"
 say "${D}日志目录：logs/　　关掉本窗口不会停止服务${N}"
@@ -199,7 +199,7 @@ say ""
 
 # 打开浏览器
 if [ "${SKIP_OPEN:-0}" != "1" ]; then
-  open "http://127.0.0.1:$FE_PORT/" 2>/dev/null || true
+  open "http://127.0.0.1:$FE_PORT/?client=desktop" 2>/dev/null || true
 fi
 
 # 双击运行时保留窗口，方便看上面的自检结果
