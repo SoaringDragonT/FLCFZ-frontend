@@ -3,7 +3,7 @@ import { RefreshCw, ShieldQuestion } from 'lucide-react';
 /*
  * 登录验证码输入框
  * ==============
- * 左边是四位数输入，右边是服务端画好的图（点图也能换一张）。
+ * 左边是四位字母输入，右边是服务端画好的图（点图也能换一张）。
  * 演示账号会自动填好，所以这里会显示一行小字说明"已自动填充"，
  * 免得用户以为在填写自己看不懂的东西。
  */
@@ -32,7 +32,7 @@ export default function CaptchaField({
 }: Props) {
   return (
     <div>
-      <label htmlFor="captcha" className="mb-2 flex items-center gap-1.5 text-sm font-medium text-slate-700">
+      <label htmlFor="captcha" className="mb-1.5 flex items-center gap-1.5 text-[13px] font-medium text-slate-700">
         <ShieldQuestion className="h-3.5 w-3.5 text-slate-400" />
         验证码
       </label>
@@ -46,7 +46,7 @@ export default function CaptchaField({
           onChange={(event) => onCodeChange(event.target.value.toUpperCase().replace(/[^A-Z]/g, ''))}
           placeholder={`${length} 位字母`}
           aria-describedby="captcha-hint"
-          className="h-12 min-w-0 flex-1 rounded-xl border border-slate-300 bg-white px-4 text-sm uppercase tracking-[0.35em] text-slate-800 placeholder:tracking-normal placeholder:text-slate-400"
+          className="h-11 min-w-0 flex-1 rounded-lg border border-slate-300 bg-white px-3.5 text-sm uppercase tracking-[0.35em] text-slate-800 placeholder:tracking-normal placeholder:text-slate-400"
         />
         <button
           type="button"
@@ -54,17 +54,17 @@ export default function CaptchaField({
           disabled={loading}
           title="看不清？换一张"
           aria-label="换一张验证码"
-          className="relative grid h-12 w-[120px] shrink-0 place-items-center overflow-hidden rounded-xl border border-slate-300 bg-slate-50 transition-colors hover:border-primary-300 disabled:opacity-60"
+          className="relative grid h-11 w-[112px] shrink-0 place-items-center overflow-hidden rounded-lg border border-slate-300 bg-slate-50 transition-colors hover:border-primary-300 disabled:opacity-60"
         >
           {imageSrc ? (
-            <img src={imageSrc} alt="验证码图片" className="h-10 w-[112px] select-none" />
+            <img src={imageSrc} alt="验证码图片" className="h-9 w-[104px] select-none" />
           ) : (
             <RefreshCw className={`h-4 w-4 text-slate-400 ${loading ? 'animate-spin' : ''}`} />
           )}
         </button>
       </div>
-      <div className="mt-1.5 flex items-center justify-between gap-2">
-        <span id="captcha-hint" className="text-[12px] text-slate-400">
+      <div className="mt-1 flex items-center justify-between gap-2 text-[11.5px]">
+        <span id="captcha-hint" className="text-slate-400">
           {autoFilled ? (
             <span className="text-primary-600">演示账号已自动填写，可直接登录</span>
           ) : error ? (
@@ -77,7 +77,7 @@ export default function CaptchaField({
           type="button"
           onClick={onRefresh}
           disabled={loading}
-          className="text-[12px] text-slate-400 transition-colors hover:text-primary-600 disabled:opacity-60"
+          className="shrink-0 text-slate-400 transition-colors hover:text-primary-600 disabled:opacity-60"
         >
           换一张
         </button>

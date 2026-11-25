@@ -33,15 +33,42 @@ type Panel = "user" | "admin";
 const readPanel = (search: string): Panel =>
   new URLSearchParams(search).get("panel") === "admin" ? "admin" : "user";
 
+/* 登录页左侧的要点：与主页首屏同一套说法，保持两页观感一致。 */
+const POINTS = [
+  "三模态采集：文本、语音、图像",
+  "持续记录：状态趋势与量表同步归档",
+  "分级预警：高风险进入人工复核",
+];
+
+/* 卡片里重复出现的字段样式：集中一处，改版时不用四处对齐 */
+const FIELD_LABEL = "mb-1.5 text-[13px] font-medium text-slate-700";
+const FIELD_INPUT = "h-11 w-full rounded-lg border border-slate-300 bg-white px-3.5 text-sm text-slate-800";
+
+/* 注册时的密码强度：只按长度与字符种类打分，够用即可，不额外占版面。 */
+function passwordStrength(value: string) {
+  let score = 0;
+  if (value.length >= 8) score += 1;
+  if (/[A-Z]/.test(value) && /[a-z]/.test(value)) score += 1;
+  if (/\d/.test(value)) score += 1;
+  if (/[^A-Za-z0-9]/.test(value)) score += 1;
+  if (score <= 1) return { label: "弱", color: "text-danger-600" };
+  if (score <= 3) return { label: "中", color: "text-warning-600" };
+  return { label: "强", color: "text-success-600" };
+}
+
 /* 独立登录页：主页左上角「登录」按钮跳到这里；主页右上角「管理员登录」带 ?panel=admin。
-   进来只做登录这一件事——平台介绍留给主页，不再一页两职。 */
+   整页锁定一屏高度（与主页首屏一致），不再上下滚动 —— 内容按登录态压到最短。 */
 export default function LoginPage() {
+  /* ==================== 一、页面状态 ==================== */
   const navigate = useNavigate();
   const { search } = useLocation();
-  const initialPanel = readPanel(search);
-  const [tab, setTab] = useState<AuthTab>("login");
-  const [panel, setPanel] = useState<Panel>(initialPanel);
   const { theme, toggleTheme } = useTheme();
+
+  const [tab, setTab] = useState<AuthTab>("login");
+  const [panel, setPanel] = useState<Panel>(readPanel(search));
+  const isAdmin = panel === "admin";
+  const isRegister = !isAdmin && tab === "register";
+
   /* 演示包（手机版）会预填演示账号：手机上打两遍账号密码很烦，
      而演示现场常是"把手机递给别人看"。没有预设时初值仍是空串。 */
   const preset = readDemoPreset().prefill ?? {};
@@ -50,31 +77,35 @@ export default function LoginPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [name, setName] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
 
-  /* ---- 登录验证码（四位字母，服务端生成与校验）----
-     演示账号（xiaoyu / adminer）由服务端回传答案，这里自动填好，
-     演示时不用手抄；普通账号必须自己看图输入。 */
+  const strength = passwordStrength(password);
+
+  /* ==================== 二、登录验证码 ==================== */
+  /* 四位字母，服务端生成与校验；演示账号由服务端回传答案，这里自动填好。
+     连不上后端（离线演示）时没有服务端可发，此时不拦登录。 */
   const [captchaId, setCaptchaId] = useState("");
   const [captchaSvg, setCaptchaSvg] = useState("");
   const [captchaCode, setCaptchaCode] = useState("");
   const [captchaLoading, setCaptchaLoading] = useState(false);
   const [captchaError, setCaptchaError] = useState("");
-  /* 连不上后端时（离线演示）没有服务端可发验证码，此时不拦登录 */
   const [captchaUnavailable, setCaptchaUnavailable] = useState(false);
 
-  const loadCaptcha = useCallback(async (name: string) => {
+  /* 登录态与管理员口需要验证码；注册不需要 */
+  const needCaptcha = isAdmin || tab === "login";
+  const demoAccount = isDemoLoginName(username);
+
+  const loadCaptcha = useCallback(async (account: string) => {
     setCaptchaLoading(true);
     setCaptchaError("");
     try {
-      const payload = await fetchCaptcha(name);
+      const payload = await fetchCaptcha(account);
       setCaptchaId(payload.id);
       setCaptchaSvg(payload.svg);
-      /* 演示账号自动填充；普通账号清空，让用户自己看 */
-      setCaptchaCode(payload.demoCode ?? "");
+      setCaptchaCode(payload.demoCode ?? ""); // 演示账号自动填充，普通账号清空
       setCaptchaUnavailable(false);
     } catch {
       setCaptchaId("");
@@ -86,67 +117,37 @@ export default function LoginPage() {
     }
   }, []);
 
-
-  /* 这里刻意**不做**"已登录就直接放行"：打开登录页永远当作没登录过，
-     输入框留空、正常走一次登录。否则点顶栏「登录」会被瞬间送进系统，
-     连表单都看不到（用户明确要求过）。
-     "记住我"仍然保留：勾了之后 token 存在 localStorage，直接访问工作台地址
-     依旧是登录状态，不用重新输。 */
-
-  /* 主题逻辑已抽到 useTheme（文档类名 / meta 主题色 / localStorage 由 hook 统一处理） */
-  const needCaptcha = panel === "admin" || tab === "login";
-  const demoAccount = isDemoLoginName(username);
-
-  /* 挂载、切换身份、切换标签、账号在「演示↔普通」之间变化时，换一张新验证码。
-     普通账号之间改用户名不刷新 —— 否则用户正抄着验证码就被换掉了。 */
+  /* 换身份、换标签、账号在「演示↔普通」之间变化时换一张；
+     普通账号之间改用户名不刷新，否则用户正抄着验证码就被换掉了。 */
   useEffect(() => {
-    if (!needCaptcha) return;
-    void loadCaptcha(username);
+    if (needCaptcha) void loadCaptcha(username);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panel, tab, needCaptcha, demoAccount]);
 
-
-  const getPasswordStrength = (
-    value: string,
-  ): { label: "弱" | "中" | "强"; color: string; score: number } => {
-    let score = 0;
-    if (value.length >= 8) score += 1;
-    if (/[A-Z]/.test(value) && /[a-z]/.test(value)) score += 1;
-    if (/\d/.test(value)) score += 1;
-    if (/[^A-Za-z0-9]/.test(value)) score += 1;
-    if (score <= 1) return { label: "弱", color: "text-danger-600", score: 1 };
-    if (score <= 3) return { label: "中", color: "text-warning-600", score: 2 };
-    return { label: "强", color: "text-success-600", score: 3 };
-  };
-
-  const strength = getPasswordStrength(password);
-
-  /* 切换主题：在切换的 ~240ms 内加过渡类，让整页颜色「渐变」而不是「硬切」。
-     大面积浅↔深硬切时看着像闪一下，加了过渡就平滑了。 */
+  /* ==================== 三、表单动作 ==================== */
   const resetTips = () => {
     setMessage("");
     setError("");
   };
 
-  const switchTab = (value: AuthTab) => {
-    setTab(value);
+  const switchTab = (next: AuthTab) => {
+    setTab(next);
     setShowPassword(false);
     resetTips();
   };
 
   const switchPanel = (next: Panel) => {
     setPanel(next);
+    setTab("login");
     setShowPassword(false);
     resetTips();
-    /* 两个身份之间切换时同样清空：不给任何预填 */
     setUsername("");
     setPassword("");
-    if (next === "admin") setTab("login");
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0 });
   };
 
-  const fillDemo = (next: Panel) => {
-    if (next === "admin") {
+  const fillDemo = () => {
+    if (isAdmin) {
       setUsername(adminDemo.username);
       setPassword(adminDemo.password);
     } else {
@@ -160,43 +161,24 @@ export default function LoginPage() {
     resetTips();
     /* 验证码：服务端不可用（离线演示）时不拦，交给 apiLogin 走本机演示数据 */
     if (needCaptcha && !captchaUnavailable) {
-      if (!captchaId) {
-        setError("验证码已失效，请点右侧「换一张」后重试");
-        return;
-      }
-      if (!captchaCode.trim()) {
-        setError("请输入验证码");
-        return;
-      }
+      if (!captchaId) return setError("验证码已失效，请点右侧「换一张」后重试");
+      if (!captchaCode.trim()) return setError("请输入验证码");
     }
     setLoading(true);
     try {
-      const result = await apiLogin(
-        username,
-        password,
-        captchaId || undefined,
-        captchaCode || undefined,
-      );
+      const result = await apiLogin(username, password, captchaId || undefined, captchaCode || undefined);
       if (!result.ok || !result.token) {
         setError(result.message || "登录失败");
-        /* 验证码是一次性的：失败后必须换一张，否则再点登录必然还是同一张 */
+        /* 验证码是一次性的：失败后必须换一张，否则再点还是同一张 */
         if (needCaptcha) void loadCaptcha(username);
         return;
       }
       saveSessionToken(result.token, rememberMe);
       saveDisplayName(result.name);
-      /* 连不上后端时 apiLogin 会自动用本机演示数据完成登录（result.offline）。
-         这里不再把它说成"登录成功"，而是如实说明进入了离线演示；
-         工作台顶栏也会挂着「离线演示」标记（AppShell）。 */
-      setMessage(
-        result.offline
-          ? "后端暂时连不上，已进入离线演示模式…"
-          : "登录成功，正在进入系统…",
-      );
-      /* 直接跳，不再 setTimeout 等 500ms：那句话是给"跳转前"看的，
-         但真实体感就是登录后干等半秒（用户提过等待太久）。
-         个人账号第一次登录先进欢迎页；判据是账号的引导状态，不是"有没有筛查记录"：
-         跳过引导的人本来就没有记录，用记录判的话他每次登录都会被再拦一次。 */
+      /* 连不上后端时 apiLogin 会用本机演示数据完成登录（result.offline），
+         这里如实说明进入离线演示，工作台顶栏也会挂「离线演示」标记。 */
+      setMessage(result.offline ? "后端暂时连不上，已进入离线演示模式…" : "登录成功，正在进入系统…");
+      /* 直接跳：个人账号首次登录先进欢迎页，判据是引导状态而不是有没有记录 */
       navigate(resolveEntryPath(result.role), { replace: true });
     } finally {
       setLoading(false);
@@ -205,21 +187,12 @@ export default function LoginPage() {
 
   const handleRegister = async () => {
     resetTips();
-    if (password !== confirmPassword) {
-      setError("两次输入的密码不一致");
-      return;
-    }
-    if (!name) {
-      setError("请输入姓名");
-      return;
-    }
+    if (password !== confirmPassword) return setError("两次输入的密码不一致");
+    if (!name) return setError("请输入姓名");
     setLoading(true);
     try {
       const result = await apiRegister(username, password, name);
-      if (!result.ok) {
-        setError(result.message || "注册失败");
-        return;
-      }
+      if (!result.ok) return setError(result.message || "注册失败");
       setMessage(result.message || "注册成功，请使用新账号登录");
       setTab("login");
       setPassword("");
@@ -230,83 +203,63 @@ export default function LoginPage() {
     }
   };
 
-  const isAdmin = panel === "admin";
-
+  /* ==================== 四、视图 ==================== */
   return (
-    <div className="page-enter auth-snap min-h-screen bg-page text-slate-800">
-      {/* 登录页顶栏：只留品牌与返回主页，不放章节导航（那些章节在主页上） */}
+    <div className="page-enter auth-snap min-h-screen bg-page text-slate-800 lg:h-[100svh] lg:min-h-0 lg:overflow-hidden">
+      {/* 顶栏：只留品牌与返回主页，与主页顶栏同高（4rem） */}
       <header className="nav-blur sticky top-0 z-40 px-6 sm:px-10 lg:px-12 xl:px-16">
         <div className="mx-auto flex h-16 w-full max-w-[1440px] items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <BrandLogo showSubtitle={false} />
-            {/* 品牌 ｜ 当前页名：与腾讯云顶栏同一做法，让人一眼知道在哪一页 */}
-            {/* whitespace-nowrap 必须加：否则窄屏下 flex 会把中文逐字换行，
-                顶栏会出现"健/康/管/理/平/台"竖排的破版。产品线与页名在窄屏隐藏。 */}
             <span className="hidden whitespace-nowrap text-[15px] font-medium text-primary-600 sm:inline">
               健康管理平台
             </span>
             <span aria-hidden="true" className="hidden h-5 w-px bg-slate-300/80 sm:block" />
-            <span className="whitespace-nowrap text-[15px] font-medium text-slate-700">{"登录"}</span>
+            <span className="whitespace-nowrap text-[15px] font-medium text-slate-700">登录</span>
           </div>
-            <div className="flex items-center gap-1.5">
-              {/* 返回主页：纯文字链接。原先那个白底描边按钮放在浅色顶栏上太抢眼 */}
-              <button
-                type="button"
-                onClick={() => navigateWithTransition(navigate, "/")}
-                className="group inline-flex items-center gap-1.5 px-2.5 py-2 text-sm font-medium text-slate-500 transition-colors duration-200 hover:text-primary-600"
-              >
-                <ArrowLeft className="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-0.5" />
-                <span className="whitespace-nowrap">返回主页</span>
-              </button>
-              <button
-                type="button"
-                className="grid h-9 w-9 place-items-center rounded-lg text-slate-500 transition-all duration-200 hover:bg-white/80 hover:text-primary-700 active:scale-90 active:bg-white"
-                aria-label={theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
-                title={theme === "dark" ? "浅色模式" : "深色模式"}
-                onClick={toggleTheme}
-              >
-                {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-              </button>
-            </div>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => navigateWithTransition(navigate, "/")}
+              className="group inline-flex items-center gap-1.5 px-2.5 py-2 text-sm font-medium text-slate-500 transition-colors duration-200 hover:text-primary-600"
+            >
+              <ArrowLeft className="h-4 w-4 transition-transform duration-200 group-hover:-translate-x-0.5" />
+              <span className="whitespace-nowrap">返回主页</span>
+            </button>
+            <button
+              type="button"
+              className="grid h-9 w-9 place-items-center rounded-lg text-slate-500 transition-all duration-200 hover:bg-white/80 hover:text-primary-700 active:scale-90 active:bg-white"
+              aria-label={theme === "dark" ? "切换到浅色模式" : "切换到深色模式"}
+              title={theme === "dark" ? "浅色模式" : "深色模式"}
+              onClick={toggleTheme}
+            >
+              {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </button>
+          </div>
         </div>
       </header>
 
-      {/* ============ 第 1 屏：登录（左宣传卡，右登录框） ============ */}
+      {/* 主体：桌面端锁定「一屏 - 顶栏」，与主页首屏等高；手机端照常纵向排布 */}
       <section
         id="login"
-        className="auth-screen relative flex items-center overflow-hidden px-6 py-8 sm:px-10 lg:px-12 xl:px-16 lg:min-h-[calc(100svh-4rem)]"
+        className="auth-screen relative flex items-center overflow-hidden px-6 py-4 sm:px-10 sm:py-8 lg:h-[calc(100svh-4rem)] lg:px-12 lg:py-6 xl:px-16"
       >
         <Aurora variant="calm" />
-        <div className="auth-login-grid relative z-10 mx-auto grid w-full items-center gap-12">
-
-          {/* 左：与平台简介屏同一套文字格式（眉标 + 大标题 + 正文 + 要点）。
-              不再整体上提：那段偏移是为旧的短卡片调的，现在卡片更高、左栏内容更短，
-              上提会把空白全堆到下方，深色模式下尤其显得空。
-              改为几何居中，并把眉标/标题/正文/要点的间距各放大一档，
-              让文字块在竖直方向铺开，与右侧卡片等高对齐。 */}
-          <div className="relative z-10">
-            <p className="text-base font-semibold tracking-[0.2em] text-primary-500">
-              关注状态 · 看见变化
-            </p>
-            <h2 className="auth-section-title mt-8 max-w-[720px] text-balance tracking-tight text-slate-900">
+        <div className="auth-login-grid relative z-10 mx-auto grid w-full items-center gap-10 lg:gap-12">
+          {/* ---------- 左：平台简介（与主页首屏同一套文字层级；手机上隐藏，只留登录卡） ---------- */}
+          <div className="relative z-10 hidden lg:block">
+            <p className="text-[13px] font-semibold tracking-[0.2em] text-primary-500">关注状态 · 看见变化</p>
+            <h2 className="auth-section-title mt-6 max-w-[720px] text-balance tracking-tight text-slate-900">
               从了解自己开始，照顾好每一天。
             </h2>
-            <p className="intro-body mt-10 max-w-[620px] text-[18px] leading-9 text-slate-600 sm:text-[20px] sm:leading-[2.15]">
+            <p className="intro-body mt-5 max-w-[34em] text-[15px] leading-7 text-slate-600 xl:text-[16px] xl:leading-8">
               连接筛查、记录与分析，让每一份关注都能得到回应；
               <br />
               登录后可查看筛查记录、状态趋势与评估报告。
             </p>
-
-            <ul className="mt-10 grid gap-2.5 border-t border-dashed border-slate-200 pt-7">
-              {[
-                "三模态采集：文本、语音、图像",
-                "持续记录：状态趋势与量表同步归档",
-                "分级预警：高风险进入人工复核",
-              ].map((point) => (
-                <li
-                  key={point}
-                  className="flex items-center gap-2.5 text-[15px] leading-6 text-slate-600"
-                >
+            <ul className="mt-7 grid gap-2 border-t border-dashed border-slate-200 pt-6">
+              {POINTS.map((point) => (
+                <li key={point} className="flex items-center gap-2.5 text-[14px] leading-6 text-slate-600">
                   <Check className="h-4 w-4 shrink-0 text-success-600" />
                   {point}
                 </li>
@@ -314,44 +267,37 @@ export default function LoginPage() {
             </ul>
           </div>
 
-          {/* 右：登录卡 */}
+          {/* ---------- 右：登录卡 ---------- */}
           <div className="relative z-10 w-full">
-            <div className="mx-auto w-full max-w-[450px] rounded-3xl border border-slate-200 bg-white p-6 shadow-[var(--card-shadow)] sm:p-7 lg:max-w-[30rem]">
-              <div className="mb-5">
-                <p
-                  className={`text-[13px] font-medium tracking-[0.16em] ${
-                    isAdmin ? "text-success-600" : "text-primary-500"
-                  }`}
-                >
-                  {isAdmin ? "STAFF ACCESS" : tab === "login" ? "WELCOME BACK" : "CREATE ACCOUNT"}
+            <div className="mx-auto w-full max-w-[420px] rounded-2xl border border-slate-200 bg-white p-4 shadow-[var(--card-shadow)] sm:p-5 lg:max-h-[calc(100svh-9rem)] lg:overflow-y-auto">
+              {/* 卡片头 */}
+              <div className="mb-3.5">
+                <p className={`text-[12px] font-medium tracking-[0.16em] ${isAdmin ? "text-success-600" : "text-primary-500"}`}>
+                  {isAdmin ? "STAFF ACCESS" : isRegister ? "CREATE ACCOUNT" : "WELCOME BACK"}
                 </p>
-                <h2 className="mt-3 text-2xl font-semibold text-slate-900">
-                  {isAdmin ? "管理员登录" : tab === "login" ? "欢迎回来" : "创建个人账号"}
+                <h2 className="mt-2 text-xl font-semibold text-slate-900">
+                  {isAdmin ? "管理员登录" : isRegister ? "创建个人账号" : "欢迎回来"}
                 </h2>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
+                <p className="mt-1.5 text-[13px] leading-5 text-slate-500">
                   {isAdmin
                     ? "咨询师与管理人员入口，用于预警研判、个案跟踪与数据维护。"
-                    : tab === "login"
-                      ? "登录后可查看筛查记录、状态趋势与评估报告。"
-                      : "建立属于您的健康档案，开始持续记录。"}
+                    : isRegister
+                      ? "建立属于您的健康档案，开始持续记录。"
+                      : "登录后可查看筛查记录、状态趋势与评估报告。"}
                 </p>
               </div>
 
-              {/* 后端连不上时如实说明：当前看到的是本机演示数据，不是服务器数据。
-                  放在表单上方而不是错误条，因为它描述的是整页的运行状态。 */}
+              {/* 后端连不上时如实说明：当前是本机演示数据，不是服务器数据 */}
               {isOfflineDemo() && (
-                <p className="mb-4 rounded-xl border border-warning-500/40 bg-warning-50 px-4 py-3 text-sm leading-6 text-warning-600">
+                <p className="mb-3 rounded-lg border border-warning-500/40 bg-warning-50 px-3 py-2 text-[12.5px] leading-5 text-warning-600">
                   后端暂时连不上，当前使用<strong className="font-semibold">离线演示数据</strong>
-                  （只保存在这台设备）。用下方演示账号可直接进入；退出登录后会重新尝试连接后端。
+                  （只保存在这台设备）。用下方演示账号可直接进入。
                 </p>
               )}
 
+              {/* 身份切换：用户端「登录 / 注册」 */}
               {!isAdmin && (
-                <div
-                  className="mb-4 flex rounded-xl bg-slate-100 p-1"
-                  role="tablist"
-                  aria-label="登录或注册"
-                >
+                <div className="mb-3 flex rounded-lg bg-slate-100 p-1" role="tablist" aria-label="登录或注册">
                   {(["login", "register"] as const).map((value) => (
                     <button
                       key={value}
@@ -359,10 +305,8 @@ export default function LoginPage() {
                       role="tab"
                       aria-selected={tab === value}
                       onClick={() => switchTab(value)}
-                      className={`flex-1 rounded-lg py-2.5 text-sm font-medium transition-all ${
-                        tab === value
-                          ? "bg-white text-slate-900 shadow-sm"
-                          : "text-slate-500 hover:text-slate-700"
+                      className={`flex-1 rounded-md py-2 text-[13px] font-medium transition-all ${
+                        tab === value ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-700"
                       }`}
                     >
                       {value === "login" ? "登录" : "注册"}
@@ -372,84 +316,82 @@ export default function LoginPage() {
               )}
 
               <form
-                className="space-y-4"
+                className="space-y-2.5"
                 onSubmit={(event) => {
                   event.preventDefault();
-                  if (!loading)
-                    void (isAdmin || tab === "login" ? handleLogin() : handleRegister());
+                  if (!loading) void (isRegister ? handleRegister() : handleLogin());
                 }}
               >
-                <div>
-                  <label
-                    htmlFor="username"
-                    className="mb-2 block text-sm font-medium text-slate-700"
-                  >
-                    {isAdmin ? "管理员账号" : "用户名"}
+                <div className="grid grid-cols-2 gap-3">
+                  <label className={isRegister ? "block" : "col-span-2 block"}>
+                    <span className={`${FIELD_LABEL} block`}>{isAdmin ? "管理员账号" : "用户名"}</span>
+                    <input
+                      id="username"
+                      autoComplete="username"
+                      required
+                      value={username}
+                      onChange={(event) => setUsername(event.target.value)}
+                      placeholder={isAdmin ? "请输入管理员账号" : "请输入用户名"}
+                      className={FIELD_INPUT}
+                    />
                   </label>
-                  <input
-                    id="username"
-                    autoComplete="username"
-                    required
-                    value={username}
-                    onChange={(event) => setUsername(event.target.value)}
-                    placeholder={isAdmin ? "请输入管理员账号" : "请输入用户名"}
-                    className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-800"
-                  />
-                </div>
-
-                {!isAdmin && tab === "register" && (
-                  <div>
-                    <label
-                      htmlFor="name"
-                      className="mb-2 block text-sm font-medium text-slate-700"
-                    >
-                      姓名
+                  {isRegister && (
+                    <label className="block">
+                      <span className={`${FIELD_LABEL} block`}>姓名</span>
+                      <input
+                        id="name"
+                        autoComplete="name"
+                        required
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                        placeholder="请输入姓名"
+                        className={FIELD_INPUT}
+                      />
                     </label>
-                    <input
-                      id="name"
-                      autoComplete="name"
-                      required
-                      value={name}
-                      onChange={(event) => setName(event.target.value)}
-                      placeholder="请输入姓名"
-                      className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-800"
-                    />
-                  </div>
-                )}
-
-                <div>
-                  <label
-                    htmlFor="password"
-                    className="mb-2 block text-sm font-medium text-slate-700"
-                  >
-                    密码
-                  </label>
-                  <div className="relative">
-                    <input
-                      id="password"
-                      type={showPassword ? "text" : "password"}
-                      autoComplete={
-                        isAdmin || tab === "login" ? "current-password" : "new-password"
-                      }
-                      required
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                      placeholder="请输入密码"
-                      className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 pr-12 text-sm text-slate-800"
-                    />
-                    <button
-                      type="button"
-                      aria-label={showPassword ? "隐藏密码" : "显示密码"}
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-3.5 text-slate-500 transition-colors hover:text-slate-700"
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-5 w-5" />
-                      ) : (
-                        <Eye className="h-5 w-5" />
+                  )}
+                  <label className={isRegister ? "block" : "col-span-2 block"}>
+                    <span className={`${FIELD_LABEL} flex items-center justify-between`}>
+                      密码
+                      {isRegister && password && (
+                        <span className={`text-[11.5px] font-normal ${strength.color}`}>{strength.label}</span>
                       )}
-                    </button>
-                  </div>
+                    </span>
+                    <span className="relative block">
+                      <input
+                        id="password"
+                        type={showPassword ? "text" : "password"}
+                        autoComplete={isRegister ? "new-password" : "current-password"}
+                        required
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        placeholder="请输入密码"
+                        className={`${FIELD_INPUT} pr-10`}
+                      />
+                      <button
+                        type="button"
+                        aria-label={showPassword ? "隐藏密码" : "显示密码"}
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-3.5 text-slate-500 transition-colors hover:text-slate-700"
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </span>
+                  </label>
+                  {isRegister && (
+                    <label className="block">
+                      <span className={`${FIELD_LABEL} block`}>确认密码</span>
+                      <input
+                        id="confirm-password"
+                        type="password"
+                        autoComplete="new-password"
+                        required
+                        value={confirmPassword}
+                        onChange={(event) => setConfirmPassword(event.target.value)}
+                        placeholder="请再次输入密码"
+                        className={FIELD_INPUT}
+                      />
+                    </label>
+                  )}
                 </div>
 
                 {needCaptcha && (
@@ -464,79 +406,23 @@ export default function LoginPage() {
                   />
                 )}
 
-                {!isAdmin && tab === "register" && (
-                  <>
-                    <div>
-                      <div className="flex justify-between text-[13px] text-slate-500">
-                        <span>密码强度</span>
-                        <span className={password ? strength.color : "text-slate-500"}>
-                          {password ? strength.label : "未输入"}
-                        </span>
-                      </div>
-                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                        <div
-                          className={`h-full rounded-full transition-all ${
-                            !password
-                              ? "w-0"
-                              : strength.score === 1
-                                ? "w-1/3 bg-danger-500"
-                                : strength.score === 2
-                                  ? "w-2/3 bg-warning-500"
-                                  : "w-full bg-success-500"
-                          }`}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label
-                        htmlFor="confirm-password"
-                        className="mb-2 block text-sm font-medium text-slate-700"
-                      >
-                        确认密码
-                      </label>
-                      <input
-                        id="confirm-password"
-                        type="password"
-                        autoComplete="new-password"
-                        required
-                        value={confirmPassword}
-                        onChange={(event) => setConfirmPassword(event.target.value)}
-                        placeholder="请再次输入密码"
-                        className="h-12 w-full rounded-xl border border-slate-300 bg-white px-4 text-sm text-slate-800"
-                      />
-                    </div>
-                  </>
-                )}
-
-                <div className="flex items-center justify-between gap-4">
-                  <label className="inline-flex cursor-pointer items-center gap-2.5 text-sm text-slate-600">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(event) => setRememberMe(event.target.checked)}
-                      className="h-4 w-4 rounded border-slate-300"
-                    />
-                    {isAdmin ? "在本机保持登录" : "记住我"}
-                  </label>
-                  <span className="inline-flex items-center gap-1 text-[13px] text-slate-500">
-                    <Check className="h-3.5 w-3.5 text-success-600" />
-                    安全登录
-                  </span>
-                </div>
+                <label className="flex cursor-pointer items-center gap-2 text-[13px] text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(event) => setRememberMe(event.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300"
+                  />
+                  {isAdmin ? "在本机保持登录" : "记住我"}
+                </label>
 
                 {error && (
-                  <p
-                    role="alert"
-                    className="rounded-xl border border-danger-100 bg-danger-50 px-4 py-3 text-sm text-danger-600"
-                  >
+                  <p role="alert" className="rounded-lg border border-danger-100 bg-danger-50 px-3 py-2 text-[12.5px] text-danger-600">
                     {error}
                   </p>
                 )}
                 {message && (
-                  <p
-                    role="status"
-                    className="rounded-xl border border-success-100 bg-success-50 px-4 py-3 text-sm text-success-600"
-                  >
+                  <p role="status" className="rounded-lg border border-success-100 bg-success-50 px-3 py-2 text-[12.5px] text-success-600">
                     {message}
                   </p>
                 )}
@@ -544,59 +430,47 @@ export default function LoginPage() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="ui-button ui-button-primary mt-1 h-12 w-full rounded-xl disabled:cursor-not-allowed disabled:opacity-60"
+                  className="ui-button ui-button-primary h-11 w-full rounded-lg disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   {loading ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
                   ) : isAdmin ? (
                     <ShieldCheck className="h-4 w-4" />
-                  ) : tab === "login" ? (
-                    <Lock className="h-4 w-4" />
-                  ) : (
+                  ) : isRegister ? (
                     <UserPlus className="h-4 w-4" />
+                  ) : (
+                    <Lock className="h-4 w-4" />
                   )}
-                  {loading
-                    ? "处理中…"
-                    : isAdmin
-                      ? "进入管理端"
-                      : tab === "login"
-                        ? "登录并进入系统"
-                        : "创建个人账号"}
+                  {loading ? "处理中…" : isAdmin ? "进入管理端" : isRegister ? "创建个人账号" : "登录并进入系统"}
                 </button>
               </form>
 
-              <button
-                type="button"
-                onClick={() => fillDemo(isAdmin ? "admin" : "user")}
-                className="mt-4 flex w-full items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-[13px] text-slate-500 transition-colors hover:border-primary-200 hover:text-slate-700"
-              >
-                <span>{isAdmin ? "管理端 · 咨询师" : "演示账号"}</span>
-                <code className="font-mono text-slate-800">
-                  {isAdmin ? `${adminDemo.username} / ${adminDemo.password}` : "xiaoyu / 123456"}
-                </code>
-              </button>
-
-              {/* 管理员入口：它是"登录"这件事的一部分，放进卡片比放顶栏自然 */}
-              <button
-                type="button"
-                onClick={() => switchPanel(isAdmin ? "user" : "admin")}
-                aria-pressed={isAdmin}
-                className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl py-2 text-[13px] font-medium text-slate-500 transition-colors duration-200 hover:bg-slate-50 hover:text-primary-600"
-              >
-                <ShieldCheck className="h-3.5 w-3.5" />
-                {isAdmin ? "返回用户登录" : "管理员 / 咨询师入口"}
-              </button>
-
-              <p className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-4 text-[13px] leading-5 text-slate-500">
-                <ShieldCheck className="h-4 w-4 shrink-0" />
-                {isAdmin
-                  ? "仅限授权人员使用，研判与处置操作均留痕"
-                  : "记录仅用于心理健康评估与服务支持，高风险进入人工复核"}
-              </p>
+              {/* 脚注：演示账号一键填充 + 管理员入口，压成一行 */}
+              <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-2.5 text-[12.5px]">
+                <button
+                  type="button"
+                  onClick={fillDemo}
+                  className="group inline-flex items-center gap-1.5 text-slate-500 transition-colors hover:text-primary-600"
+                >
+                  <span>{isAdmin ? "管理端演示" : "演示账号"}</span>
+                  <code className="font-mono text-slate-800">
+                    {isAdmin ? `${adminDemo.username} / ${adminDemo.password}` : "xiaoyu / 123456"}
+                  </code>
+                </button>
+                <span aria-hidden="true" className="hidden h-3 w-px bg-slate-200 sm:block" />
+                <button
+                  type="button"
+                  onClick={() => switchPanel(isAdmin ? "user" : "admin")}
+                  aria-pressed={isAdmin}
+                  className="inline-flex items-center gap-1 text-slate-500 transition-colors hover:text-primary-600"
+                >
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                  {isAdmin ? "返回用户登录" : "管理员 / 咨询师入口"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
-
       </section>
     </div>
   );
