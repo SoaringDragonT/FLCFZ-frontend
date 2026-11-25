@@ -485,27 +485,8 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
             </div>
           ))}
         </nav>
-        {/* 底部入口卡：这张卡原来只有一句话，却长得像能点（评审意见第 4 条：
-            "想点一些什么，但也没有可以点的"）。现在整张卡是一个真实入口，
-            带悬停反馈与右箭头，管理端去预警处置、个人端去心理档案。 */}
-        <Link
-          to={isAdmin ? `${root}/alerts` : `${root}/me/kg`}
-          onClick={closeNavigation}
-          title={isAdmin ? "进入预警研判与处置" : "查看我的心理档案"}
-          className="sidebar-label group mx-5 mb-5 mt-auto shrink-0 rounded-2xl border border-slate-200/70 bg-white/70 p-5 text-center transition-colors hover:border-primary-200 hover:bg-white"
-        >
-          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-primary-50 text-primary-600 transition-colors group-hover:bg-primary-100">
-            <ShieldCheck className="h-5 w-5" />
-          </div>
-          <p className="text-sm font-semibold text-slate-800">每一份关注，都有意义</p>
-          <p className="mt-2 whitespace-normal text-balance text-xs leading-5 text-slate-500">
-            {isAdmin ? "从筛查到跟进，让关怀及时抵达。" : "从了解自己开始，照顾好每一天。"}
-          </p>
-          <span className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-primary-600">
-            {isAdmin ? "进入预警研判" : "查看心理档案"}
-            <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-          </span>
-        </Link>
+        {/* 评审意见第 4 条：这张「每一份关注，都有意义」的卡片视觉上像功能入口，
+            实际只展示说明文字 —— 直接移除，底部只保留一行低对比度的空间名称。 */}
         <div className="sidebar-footer">
           <span className="sidebar-label">
             心理健康 · {isAdmin ? "管理工作空间" : "个人健康空间"}
