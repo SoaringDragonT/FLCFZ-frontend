@@ -41,8 +41,8 @@ const POINTS = [
 ];
 
 /* 卡片里重复出现的字段样式：集中一处，改版时不用四处对齐 */
-const FIELD_LABEL = "mb-1.5 text-[13px] font-medium text-slate-700";
-const FIELD_INPUT = "h-11 w-full rounded-lg border border-slate-300 bg-white px-3.5 text-sm text-slate-800";
+const FIELD_LABEL = "mb-1.5 text-[13.5px] font-medium text-slate-700";
+const FIELD_INPUT = "h-11 w-full rounded-lg border border-slate-300 bg-white px-3.5 text-[14px] text-slate-800";
 
 /* 注册时的密码强度：只按长度与字符种类打分，够用即可，不额外占版面。 */
 function passwordStrength(value: string) {
@@ -242,7 +242,7 @@ export default function LoginPage() {
       {/* 主体：桌面端锁定「一屏 - 顶栏」，与主页首屏等高；手机端照常纵向排布 */}
       <section
         id="login"
-        className="auth-screen relative flex items-center overflow-hidden px-6 py-4 sm:px-10 sm:py-8 lg:h-[calc(100svh-4rem)] lg:px-12 lg:py-6 xl:px-16"
+        className="auth-screen relative flex items-center overflow-hidden px-6 py-4 sm:px-10 sm:py-8 lg:h-[calc(100svh-4rem)] lg:px-12 lg:py-4 xl:px-16"
       >
         <Aurora variant="calm" />
         <div className="auth-login-grid relative z-10 mx-auto grid w-full items-center gap-10 lg:gap-12">
@@ -269,16 +269,16 @@ export default function LoginPage() {
 
           {/* ---------- 右：登录卡 ---------- */}
           <div className="relative z-10 w-full">
-            <div className="mx-auto w-full max-w-[420px] rounded-2xl border border-slate-200 bg-white p-4 shadow-[var(--card-shadow)] sm:p-5 lg:max-h-[calc(100svh-9rem)] lg:overflow-y-auto">
+            <div className="mx-auto w-full max-w-[452px] rounded-2xl border border-slate-200 bg-white p-4 xl:max-w-[476px] shadow-[var(--card-shadow)] sm:p-5 lg:max-h-[calc(100svh-6rem)] lg:overflow-y-auto">
               {/* 卡片头 */}
               <div className="mb-3.5">
-                <p className={`text-[12px] font-medium tracking-[0.16em] ${isAdmin ? "text-success-600" : "text-primary-500"}`}>
+                <p className={`text-[12.5px] font-medium tracking-[0.16em] ${isAdmin ? "text-success-600" : "text-primary-500"}`}>
                   {isAdmin ? "STAFF ACCESS" : isRegister ? "CREATE ACCOUNT" : "WELCOME BACK"}
                 </p>
-                <h2 className="mt-2 text-xl font-semibold text-slate-900">
+                <h2 className="mt-2 text-[23px] font-semibold leading-tight text-slate-900">
                   {isAdmin ? "管理员登录" : isRegister ? "创建个人账号" : "欢迎回来"}
                 </h2>
-                <p className="mt-1.5 text-[13px] leading-5 text-slate-500">
+                <p className="mt-1.5 text-[13.5px] leading-5 text-slate-500">
                   {isAdmin
                     ? "咨询师与管理人员入口，用于预警研判、个案跟踪与数据维护。"
                     : isRegister
@@ -445,29 +445,28 @@ export default function LoginPage() {
                 </button>
               </form>
 
-              {/* 脚注：演示账号一键填充 + 管理员入口，压成一行 */}
-              <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-slate-100 pt-2.5 text-[12.5px]">
-                <button
-                  type="button"
-                  onClick={fillDemo}
-                  className="group inline-flex items-center gap-1.5 text-slate-500 transition-colors hover:text-primary-600"
-                >
-                  <span>{isAdmin ? "管理端演示" : "演示账号"}</span>
-                  <code className="font-mono text-slate-800">
-                    {isAdmin ? `${adminDemo.username} / ${adminDemo.password}` : "xiaoyu / 123456"}
-                  </code>
-                </button>
-                <span aria-hidden="true" className="hidden h-3 w-px bg-slate-200 sm:block" />
-                <button
-                  type="button"
-                  onClick={() => switchPanel(isAdmin ? "user" : "admin")}
-                  aria-pressed={isAdmin}
-                  className="inline-flex items-center gap-1 text-slate-500 transition-colors hover:text-primary-600"
-                >
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  {isAdmin ? "返回用户登录" : "管理员 / 咨询师入口"}
-                </button>
-              </div>
+              {/* 演示账号：整行点击即填充，与管理员入口上下分列、不并排 */}
+              <button
+                type="button"
+                onClick={fillDemo}
+                className="mt-2.5 flex w-full items-center justify-between gap-3 rounded-lg border border-slate-200 bg-white px-3.5 py-1.5 text-[13px] text-slate-500 transition-colors hover:border-primary-200 hover:text-slate-700"
+              >
+                <span>{isAdmin ? "管理端演示" : "演示账号"}</span>
+                <code className="font-mono text-[13px] text-slate-800">
+                  {isAdmin ? `${adminDemo.username} / ${adminDemo.password}` : "xiaoyu / 123456"}
+                </code>
+              </button>
+
+              {/* 管理员入口：独立一行居中的文字按钮 */}
+              <button
+                type="button"
+                onClick={() => switchPanel(isAdmin ? "user" : "admin")}
+                aria-pressed={isAdmin}
+                className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-lg py-1 text-[13px] font-medium text-slate-500 transition-colors hover:bg-slate-50 hover:text-primary-600"
+              >
+                <ShieldCheck className="h-4 w-4" />
+                {isAdmin ? "返回用户登录" : "管理员 / 咨询师入口"}
+              </button>
             </div>
           </div>
         </div>
