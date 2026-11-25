@@ -1924,9 +1924,6 @@ html:not(.app-booted) .page-enter {
   letter-spacing: 0.25px;
 }
 @media (min-width: 640px) {
-  .auth-snap .auth-hero-title {
-    font-size: 3.125rem; /* 50px */
-  }
   .auth-snap .auth-section-title {
     /* 腾讯实测是 46px，用户反馈"可以调大点，但不要太过"，取 52px：
        仍在腾讯那一档的量级（占容器约 8.5%，介于腾讯 5.2% 与原 9.8% 之间），
@@ -2072,15 +2069,7 @@ html:not(.app-booted) .page-enter {
    —— 与登录页卡片完全同一套结构：眉标（13px / 字距 .16em / 主色）+
       标题 + 说明文字。只是工作台一屏要放数据，标题取 30px，
       而不是主页那档 38~68px 的展示型大标题。
-   和 .auth-snap 一样必须写在 @layer 之外：上面的 h1 { 26px } 未分层，
-   否则这里的字号会被它压掉。
-   ========================================================================== */
-.app-page-eyebrow {
-  font-size: 0.8125rem; /* 13px，同登录页卡片眉标 */
-  font-weight: 500;
-  letter-spacing: 0.16em;
-  color: var(--color-primary-500);
-}
+   和 .auth-snap 一样必须写在 @layer 之外：上面的 h1 { 26px }
 
 .app-page-title {
   font-size: clamp(1.875rem, 2vw, 2rem);
@@ -2187,22 +2176,6 @@ html:not(.app-booted) .page-enter {
   to {
     opacity: 1;
   }
-}
-
-/* 轨道上的那枚点：最后出现，作为视觉落点。
-   它刻意不带 .welcome-orbit —— 那套规则会改写 left/top/margin（类选择器权重更高），
-   把这个点甩到圆心上去。 */
-.welcome-dot {
-  position: absolute;
-  left: 62%;
-  top: 48%;
-  width: 10px;
-  height: 10px;
-  margin: -285px 0 0 5px;
-  border-radius: 999px;
-  background: var(--color-primary-500);
-  box-shadow: 0 0 0 6px #465fff1f;
-  pointer-events: none;
 }
 .welcome-in .welcome-dot {
   opacity: 0;
@@ -2362,33 +2335,6 @@ html:not(.app-booted) .page-enter {
 /* 折线图的网格线与辅助线：用变量而非硬编码，深色下自动变暗 */
 .chart-grid {
   stroke: var(--color-slate-100);
-}
-.chart-guide {
-  stroke: var(--color-slate-200);
-}
-
-.auth-art {
-  position: relative;
-  overflow: hidden;
-}
-.auth-art::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(#465fff0a 1px, transparent 1px),
-    linear-gradient(90deg, #465fff0a 1px, transparent 1px);
-  background-size: 48px 48px;
-  -webkit-mask-image: radial-gradient(ellipse at center, black 25%, transparent 75%);
-  mask-image: radial-gradient(ellipse at center, black 25%, transparent 75%);
-}
-.auth-orbit {
-  position: absolute;
-  width: 560px;
-  height: 560px;
-  border: 1px solid #465fff12;
-  border-radius: 50%;
-  pointer-events: none;
 }
 
 

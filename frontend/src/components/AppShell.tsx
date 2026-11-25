@@ -310,7 +310,6 @@ export default function AppShell({ mode }: { mode: "admin" | "personal" }) {
     ) || items[0];
   const isDashboard =
     location.pathname === `${root}/dashboard` ||
-    location.pathname === `${root}/dashboard-v2` ||
     /* 首页的另一版（对照用），同样自带 hero */
     location.pathname === `${root}/dashboard-alt`;
   /* 个人端首页自带整块 hero（眉标 + 场景标题 + 一句话），

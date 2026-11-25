@@ -5,7 +5,6 @@ import RetainedWorkspace from './components/RetainedWorkspace';
 import ScrollToTop from './components/ScrollToTop';
 import ScrollHint from './components/ScrollHint';
 import Dashboard from './pages/Dashboard';
-import DashboardV2 from './pages/DashboardV2';
 import ReviewTasks from './pages/ReviewTasks';
 
 import DataCollection from './pages/DataCollection';
@@ -158,7 +157,8 @@ export default function App() {
       <Route path="/personal" element={<RequireRole role="user"><Layout /></RequireRole>}>
         <Route index element={<Navigate to="/personal/dashboard" replace />} />
         <Route path="dashboard" element={<Dashboard />} />
-        <Route path="dashboard-v2" element={<DashboardV2 />} />
+        {/* 早期对照版首页已下线（内容已被 /personal/dashboard 覆盖），保留跳转兼容旧链接 */}
+        <Route path="dashboard-v2" element={<Navigate to="/personal/dashboard" replace />} />
         {/* 个人端「心理筛查」= 原筛查 + 多模态采集 + 检索分析，五个标签页都由 ?tab= 切换。
             「检索与分析」已并入本页的 retrieval 标签，不再单独占一个菜单项。 */}
         <Route path="screening" element={<DataCollection />} />
