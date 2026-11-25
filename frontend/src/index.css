@@ -983,8 +983,23 @@ h3.text-2xl {
   padding-bottom: 0;
 }
 
-
-
+/* 矮窗口把更多横向空间留给正文和按钮，让首屏仍然一次翻到核心技术。 */
+@media (min-width: 1024px) and (max-height: 650px) {
+  #top .hero-grid {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    gap: 1.5rem;
+  }
+  #top .hero-art img {
+    width: 40vw;
+  }
+  #top .hero-body,
+  #top .hero-badges {
+    margin-top: 0.625rem;
+  }
+  .auth-snap #top {
+    padding-block: 0.75rem;
+  }
+}
 
 /* --------------------------------------------------------------------------
    首屏"玻璃"形状层

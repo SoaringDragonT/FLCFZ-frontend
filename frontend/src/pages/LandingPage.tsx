@@ -694,7 +694,7 @@ export default function LandingPage() {
         <div
           aria-hidden="true"
           data-reveal
-          className="pointer-events-none absolute inset-y-0 right-0 z-[1] hidden items-end justify-end lg:flex"
+          className="hero-art pointer-events-none absolute inset-y-0 right-0 z-[1] hidden items-end justify-end lg:flex"
         >
           <img
             src={heroCalmLight}
@@ -707,7 +707,7 @@ export default function LandingPage() {
             className="hidden h-auto max-h-[calc(100%-64px)] w-[48vw] max-w-[760px] object-contain object-right-bottom dark:block"
           />
         </div>
-        <div className="relative z-10 mx-auto grid w-full max-w-[1440px] items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16">
+        <div className="hero-grid relative z-10 mx-auto grid w-full max-w-[1440px] items-center gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-16">
           <div data-reveal className="@container">
             <p className="text-base font-semibold tracking-[0.2em] text-primary-500">
               平台概览
@@ -726,9 +726,6 @@ export default function LandingPage() {
               匹配相似案例，再由
                 <strong className="font-medium text-slate-800">RAG</strong>
               结合心理知识库生成可追溯的筛查报告；管理端据此完成分级预警与个案跟踪。
-            </p>
-            <p className="mt-4 max-w-[640px] rounded-xl border border-slate-200 bg-white/70 px-4 py-3 text-[14px] leading-7 text-slate-600">
-              实际使用分两种方式：只完成一份 2–4 分钟的标准化量表，就能得到量表分档与基础建议；如果愿意继续补充文本、语音或图像，系统才会启动跨模态检索与 RAG 报告。补充可以随时跳过，结果页会明确标明本次结论用了哪些依据。
             </p>
 
             {/* 特性列表 + 首屏「立即体验」：与右上角「登录」同一个入口（进登录页后再切换身份）。

@@ -21,3 +21,18 @@ test('较高的章节仍可读到底，其余章节保持滚轮、键盘和导�
   await page.locator('[data-nav="top"]').click();
   await expect.poll(() => topOf('top')).toBe(0);
 });
+
+test('笔记本矮窗口的首屏完整可见，滚动一次进入核心技术', async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 540 });
+  await page.goto('/?client=desktop#/');
+  const hero = page.locator('#top');
+  await expect(hero).toBeVisible();
+  await expect(hero).not.toContainText('实际使用分两种方式');
+  await expect.poll(() => hero.evaluate(el =>
+    Math.round(el.getBoundingClientRect().bottom - innerHeight))).toBe(0);
+  await expect(hero.getByRole('button', { name: '立即体验' })).toBeInViewport({ ratio: 1 });
+  await page.mouse.move(400, 250);
+  await page.mouse.wheel(0, 100);
+  await expect.poll(() => page.locator('#tech').evaluate(el =>
+    Math.round(el.getBoundingClientRect().top - document.querySelector('header')!.offsetHeight))).toBe(0);
+});
