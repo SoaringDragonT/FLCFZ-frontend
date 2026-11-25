@@ -93,11 +93,10 @@ export default function LandingPage() {
        「下一屏」为目标并接管动画；同一手势的惯性只做收尾，不再翻第二屏。
      · 动画——ease-out，从当前位置直接走，不做"从零加速"；时长 360–540ms。
      · 解锁——动画结束且滚轮静默 100ms 后，才允许下一次独立下滑。
-     · 向上——不接管，继续原生滚动，停手后按 28% 门槛吸附；下滑动画中
+     · 向上——保留原生连续滚动；下滑动画中
        明确反向超过 10px 就取消动画、交还原生滚动。
      · 布局只在挂载 / resize / 内容尺寸变化时测量，滚动过程只读缓存。 */
   useEffect(() => {
-    const NAV_H = 64;
     const DOWN_TRIGGER = 32;      // 标准化后的累计触发量（30–50 可调）
     const DOWN_MIN_FLIP = 8;      // 手势结束时至少走过这么多才翻，避免轻微抖动误触
     const DOWN_STEP_GAIN = 0.32;  // 触发前的跟手位移比例
@@ -108,17 +107,16 @@ export default function LandingPage() {
     const GESTURE_GAP = 140;      // 两段滚轮间隔超过它 → 算新手势
     const UNLOCK_QUIET = 100;     // 动画结束后滚轮静默这么久才解锁下一屏
     const REVERSE_PX = 10;        // 下滑动画中反向超过它 → 交还控制
-    const UP_TRIGGER = 0.28;      // 触屏向上停手后的 28% 屏高阈值（滚轮向上已改为就近吸附）
+    const UP_TRIGGER = 0.28;      // 桌面触屏停手后的翻页阈值
     const END_QUIET = 110;        // 不足 32px 就停手时，用这个间隔做兜底判定
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const desktop = window.matchMedia("(min-width: 1024px) and (min-height: 600px)");
+    const desktop = window.matchMedia("(min-width: 1024px)");
 
     /* —— 缓存的布局数据：滚动时只读这些，不再反复量 DOM —— */
     let screens: HTMLElement[] = [];
     let tops: number[] = [];
     let maxScroll = 0;
     let viewH = 0;
-    let fits = false;
 
     let raf = 0;
     let animating = false;
@@ -147,42 +145,22 @@ export default function LandingPage() {
     /* ease-out：接管时速度最大、后半程减速，避免"先停住再重新起步" */
     const easeOut = (t: number) => 1 - Math.pow(1 - t, 2.6);
 
-    /* 取"参与布局的那一层"：每屏的第一个子元素是绝对定位的极光背景，
-       用它量高度会永远等于整屏，兜底判断形同失效。 */
-    const contentRow = (el: HTMLElement) =>
-      Array.from(el.children).find((child) => {
-        const pos = getComputedStyle(child).position;
-        return pos !== "absolute" && pos !== "fixed";
-      }) as HTMLElement | undefined;
-
-    const contentFits = (els: HTMLElement[]) => {
-      const avail = viewH;
-      return els.every((el) => {
-        const row = contentRow(el);
-        if (!row) return true;
-        const kids = Array.from(row.children).filter((k) => {
-          const pos = getComputedStyle(k).position;
-          return pos !== "absolute" && pos !== "fixed";
-        });
-        /* 用 offsetHeight 而不是 getBoundingClientRect：
-           入场动画的 transform 会改变 rect，但不会改变布局高度，
-           用 rect 会在动画中途误判"这一屏装不下"而关掉整屏翻页。 */
-        const tallest = kids.length
-          ? Math.max(...kids.map((k) => (k as HTMLElement).offsetHeight))
-          : row.offsetHeight;
-        const style = getComputedStyle(row);
-        const padding =
-          parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
-        return tallest + padding <= avail + 4;
-      });
-    };
-
     const measure = () => {
       screens = Array.from(document.querySelectorAll<HTMLElement>(".auth-screen"));
-      viewH = window.innerHeight - NAV_H;
+      const headerHeight = headerRef.current?.offsetHeight ?? 0;
+      viewH = Math.max(1, window.innerHeight - headerHeight);
       maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
-      tops = screens.map((el) => clampY(el.offsetTop - NAV_H));
-      fits = desktop.matches && contentFits(screens);
+      tops = [];
+      for (const section of screens) {
+        const start = clampY(section.offsetTop - headerHeight);
+        tops.push(start);
+        // 长章节保留阅读落点，滚到末段后再翻到下一章。1px 的边框不单独成页。
+        const last = clampY(start + section.offsetHeight - viewH);
+        for (let y = start; y < last - 4;) {
+          y = Math.min(y + viewH, last);
+          tops.push(y);
+        }
+      }
     };
 
     const scheduleMeasure = () => {
@@ -197,11 +175,8 @@ export default function LandingPage() {
       if (typeof ResizeObserver === "undefined") return;
       ro?.disconnect();
       ro = new ResizeObserver(scheduleMeasure);
-      screens.forEach((el) => {
-        ro!.observe(el);
-        const row = contentRow(el);
-        if (row) ro!.observe(row);
-      });
+      for (const section of screens) ro.observe(section);
+      if (headerRef.current) ro.observe(headerRef.current);
     };
 
     const cancelGlide = () => {
@@ -312,7 +287,7 @@ export default function LandingPage() {
     const endGesture = () => {
       if (!gestureActive) return;
       gestureActive = false;
-      if (animating || locked || !desktop.matches || !fits || !tops.length) return;
+      if (animating || locked || !desktop.matches || !tops.length) return;
       if (accDown >= DOWN_MIN_FLIP && gestureTarget != null) {
         triggerDown();
         return;
@@ -326,7 +301,7 @@ export default function LandingPage() {
     };
 
     const onWheel = (event: WheelEvent) => {
-      if (!desktop.matches || !fits || !tops.length) return;
+      if (!desktop.matches || !tops.length) return;
       if (event.ctrlKey) return; // 触控板捏合缩放
       const unit =
         event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1;
@@ -405,7 +380,7 @@ export default function LandingPage() {
 
     /* 桌面触屏（一体机 / 触控笔记本）：沿用原来的"原生滚 + 停手吸附" */
     const onTouchStart = () => {
-      if (!desktop.matches || !fits) return;
+      if (!desktop.matches) return;
       cancelGlide();
       touchStartY = window.scrollY;
       locked = false;
@@ -417,7 +392,7 @@ export default function LandingPage() {
     };
 
     const onTouchEnd = () => {
-      if (!desktop.matches || !fits || touchStartY < 0 || !tops.length) return;
+      if (!desktop.matches || touchStartY < 0 || !tops.length) return;
       const from = touchStartY;
       touchStartY = -1;
       const delta = window.scrollY - from;
@@ -430,9 +405,7 @@ export default function LandingPage() {
 
     const goBy = (dir: 1 | -1) => {
       if (!tops.length) return;
-      const base = nearestIndex(window.scrollY);
-      const to = Math.min(tops.length - 1, Math.max(0, base + dir));
-      if (to === base) return;
+      const to = stepIndex(window.scrollY, dir);
       locked = false;
       gestureActive = false;
       lastDir = 0;
@@ -449,7 +422,7 @@ export default function LandingPage() {
       const down = event.key === "ArrowDown" || event.key === "PageDown" || isSpace;
       const up = event.key === "ArrowUp" || event.key === "PageUp";
       if (!down && !up) return;
-      if (!desktop.matches || !fits || animating) return;
+      if (!desktop.matches || animating) return;
       event.preventDefault();
       goBy(down ? 1 : -1);
     };
