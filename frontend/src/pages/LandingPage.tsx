@@ -745,7 +745,7 @@ export default function LandingPage() {
             {/* 首屏讲"这个产品能做什么"，技术路线留给「核心技术」屏。
                 依据申报书「使用说明」：用户经三模态采集 → 自动生成预警报告 →
                 管理端完成预警处置与个案跟踪。 */}
-            <p className="hero-body mt-8 max-w-[640px] text-[18px] leading-9 text-slate-600 sm:text-[20px] sm:leading-[2.1]">
+            <p className="hero-body intro-body mt-8 max-w-[640px] text-[18px] leading-9 text-slate-600 sm:text-[20px] sm:leading-[2.1]">
               面向校园、企业、社区的
                 <strong className="font-medium text-slate-800">心理筛查预警平台</strong>
               。用户完成一次文本、语音、图像的三模态采集，系统即以
@@ -761,10 +761,8 @@ export default function LandingPage() {
             {/* 特性列表 + 首屏「立即体验」：与右上角「登录」同一个入口（进登录页后再切换身份）。
                 按钮与四条清单同处一行，垂直居中对齐（落在第二、三条之间），并在这行
                 剩余的横向空间里居中 —— 不是整栏居中，仍保持左栏的左对齐关系。
-                用容器查询按「左栏实际宽度」切两栏：只有宽度 ≥510px（清单 329 + 按钮 133
-                + 两侧各留 24）时才并排，1024 那种窄左栏自动落回按钮在下的单栏。
-                不要改成 justify-between：那会把按钮顶到右边缘，贴着右侧大卡片。 */}
-            <div className="mt-5 grid grid-cols-1 items-center gap-y-4 border-t border-dashed border-slate-200 pt-4 @[510px]:grid-cols-[auto_minmax(0,1fr)]">
+                左栏达到 510px 后给按钮预留完整宽度，较长的清单文字在剩余空间换行。 */}
+            <div className="mt-5 grid grid-cols-1 items-center gap-y-4 border-t border-dashed border-slate-200 pt-4 @[510px]:grid-cols-[minmax(0,max-content)_minmax(max-content,1fr)] @[510px]:gap-x-4">
               <ul className="grid gap-1">
                 {[
                   "动态跨模态哈希检索：毫秒级匹配相似案例",

@@ -212,7 +212,7 @@ export default function LoginPage() {
         className="auth-screen relative flex items-center overflow-hidden px-6 py-8 sm:px-10 lg:px-12 xl:px-16 lg:min-h-[calc(100svh-4rem)]"
       >
         <Aurora variant="calm" />
-        <div className="relative z-10 mx-auto grid w-full max-w-[1440px] items-center gap-12 lg:grid-cols-[minmax(0,620px)_minmax(0,450px)] lg:justify-center lg:gap-[72px] 2xl:grid-cols-[minmax(0,720px)_minmax(0,500px)] 2xl:gap-[96px]">
+        <div className="auth-login-grid relative z-10 mx-auto grid w-full items-center gap-12">
 
           {/* 左：与平台简介屏同一套文字格式（眉标 + 大标题 + 正文 + 要点）。
               不再整体上提：那段偏移是为旧的短卡片调的，现在卡片更高、左栏内容更短，
@@ -226,7 +226,7 @@ export default function LoginPage() {
             <h2 className="auth-section-title mt-8 max-w-[720px] text-balance tracking-tight text-slate-900">
               从了解自己开始，照顾好每一天。
             </h2>
-            <p className="mt-10 max-w-[620px] text-[18px] leading-9 text-slate-600 sm:text-[20px] sm:leading-[2.15]">
+            <p className="intro-body mt-10 max-w-[620px] text-[18px] leading-9 text-slate-600 sm:text-[20px] sm:leading-[2.15]">
               连接筛查、记录与分析，让每一份关注都能得到回应；
               <br />
               登录后可查看筛查记录、状态趋势与评估报告。
@@ -251,7 +251,7 @@ export default function LoginPage() {
 
           {/* 右：登录卡 */}
           <div className="relative z-10 w-full">
-            <div className="mx-auto w-full max-w-[450px] rounded-3xl border border-slate-200 bg-white p-6 shadow-[var(--card-shadow)] sm:p-7 2xl:max-w-[500px]">
+            <div className="mx-auto w-full max-w-[450px] rounded-3xl border border-slate-200 bg-white p-6 shadow-[var(--card-shadow)] sm:p-7 lg:max-w-[30rem]">
               <div className="mb-5">
                 <p
                   className={`text-[13px] font-medium tracking-[0.16em] ${

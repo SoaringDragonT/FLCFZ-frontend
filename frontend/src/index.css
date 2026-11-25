@@ -171,7 +171,6 @@ html.theme-switching *::after {
        腾讯官网保持系统默认（auto），中文小字明显更锐利。 */
     -webkit-font-smoothing: auto;
     -moz-osx-font-smoothing: auto;
-    -moz-osx-font-smoothing: grayscale;
   }
   #root {
     min-height: 100vh;
@@ -319,7 +318,7 @@ html.theme-switching *::after {
   }
   /* 侧栏宽度统一由变量驱动：悬浮把手的位置要跟着一起动 */
   .app-shell {
-    --sidebar-width: 290px;
+    --sidebar-width: clamp(14rem, 16vw, 18.125rem);
   }
   /* 环境光背景层：与主页内容屏同一个 .aurora，固定铺在整个工作台之下。
      侧栏与卡片都是半透明的，光斑因此会从玻璃后面透出来。 */
@@ -880,7 +879,7 @@ h1.text-3xl {
    另外原来是内联 style={{ fontSize: tune.title }}，tune.title 是调参面板留下的
    常量 54（as const，没有任何响应式逻辑），内联优先级最高所以桌面一直是对的，
    但在 390px 手机上同样是 54px，标题撑成两行巨字、占掉近半屏。
-   这里按断点给：手机 32 / 平板 44 / 桌面 54（桌面与调参定稿一致）。 */
+   手机 32px，平板 44px，桌面随可用宽度调整。 */
 .dash-hero-title {
   font-size: 2rem; /* 32px */
 }
@@ -889,7 +888,8 @@ h1.text-3xl {
    单列布局保留自然高度，避免手机出现大块留白。 */
 @media (min-width: 1180px) {
   .dashboard-hero {
-    height: max(36rem, calc(100svh - var(--topbar-height, 4rem) - 8rem));
+    grid-template-columns: minmax(0, 1fr) clamp(20rem, 26vw, 26.875rem);
+    height: clamp(28rem, 59svh, 36rem);
   }
   .dashboard-hero > .action-plan-card {
     align-self: stretch;
@@ -923,14 +923,10 @@ h1.text-3xl {
 @media (min-width: 640px) {
   .dash-hero-title { font-size: 2.75rem; } /* 44px */
 }
-/* 1024–1439：内容区被 290px 侧栏吃掉后只剩 ~670–1090px，
-   54px 的 11 字标题要 ~600px，会和右侧「今日行动计划」叠在一起。
-   这一档先给 44px；1440 以上空间够了再放到 54px。 */
 @media (min-width: 1024px) {
-  .dash-hero-title { font-size: 2.75rem; } /* 44px */
-}
-@media (min-width: 1440px) {
-  .dash-hero-title { font-size: 3.375rem; } /* 54px */
+  .dash-hero-title {
+    font-size: clamp(2.25rem, 3vw, 3.375rem);
+  }
 }
 h2,
 h3,
@@ -2015,14 +2011,32 @@ html:not(.app-booted) .page-enter {
   text-wrap: wrap;
 }
 
-/* 超宽屏（全屏 2K/4K）适配：内容上浮一档，避免"小内容飘在大屏中央" */
-@media (min-width: 1536px) {
-  .auth-snap .auth-hero-title {
-    font-size: 3.75rem; /* 56 → 60px */
+/* 桌面标题随浏览器可用的宽、高连续缩放。9em 的行宽保留中文词组断行。 */
+@media (min-width: 1024px) {
+  .auth-snap .auth-screen .auth-section-title {
+    margin-top: clamp(1rem, 2.4svh, 1.5rem);
+    font-size: clamp(2.25rem, min(3.2vw, 6svh), 3.25rem);
+    font-weight: 500;
+    line-height: 1.22;
   }
+  .auth-snap .auth-screen .intro-body {
+    max-width: 36em;
+    margin-top: clamp(1.125rem, 2.8svh, 1.75rem);
+    font-size: clamp(1rem, 1.2vw, 1.125rem);
+    line-height: 1.8;
+  }
+  .auth-login-grid {
+    max-width: 78rem;
+    grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+    column-gap: clamp(3rem, 6vw, 6rem);
+  }
+}
+
+/* 保留首次引导在大屏上的原有标题层级。 */
+@media (min-width: 1536px) {
+  .auth-snap .auth-hero-title,
   .auth-snap .auth-section-title {
-    /* 跟着 52px 那档同比例放大一档（原 68px） */
-    font-size: 3.75rem; /* 60px */
+    font-size: 3.75rem;
   }
 }
 
@@ -2042,18 +2056,11 @@ html:not(.app-booted) .page-enter {
 }
 
 .app-page-title {
-  font-size: 1.875rem; /* 30px */
+  font-size: clamp(1.875rem, 2vw, 2rem);
   line-height: 1.2;
   font-weight: 500;
   letter-spacing: 0.25px;
   overflow-wrap: break-word;
-}
-
-/* 超宽屏（2K/4K）与主页一样上浮一档 */
-@media (min-width: 1536px) {
-  .app-page-title {
-    font-size: 2rem; /* 32px */
-  }
 }
 
 /* ==========================================================================
@@ -2429,7 +2436,7 @@ html:not(.app-booted) .page-enter {
    其它章节的节奏不动：标题小一档、正文行高与字号收一档、纵向留白压一压，
    目标是 700px 高度内也能完整看到 CTA 与标签。
    ========================================================================== */
-@media (max-height: 820px) {
+@media (max-width: 1023px) and (max-height: 820px) {
   #top {
     padding-top: 1.25rem;
     padding-bottom: 1.5rem;
@@ -2450,7 +2457,7 @@ html:not(.app-booted) .page-enter {
 }
 
 /* 更矮（约 700px，13 寸全屏 + 工具栏）：再收一档字号 */
-@media (max-height: 740px) {
+@media (max-width: 1023px) and (max-height: 740px) {
   #top .auth-section-title {
     font-size: 2.15rem;
     line-height: 1.15;

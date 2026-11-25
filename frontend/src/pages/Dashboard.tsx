@@ -366,12 +366,7 @@ export default function Dashboard() {
 
   return (
     <div className="grid gap-6">
-      {/* 右栏在 1024–1535 收窄到 380px：1440 以下的内容区只有 ~920–1090px，
-        430px 的卡片会把左栏挤到 500px 以内 —— 54px 的标题与"不换行"的灰字
-        都会横向溢出、压到卡片上（1270×750 实测）。2xl 再放开到 430。 */}
-      {/* 1180 以下改成单列：1024–1179 时内容区只有 670–820px，
-          380px 的计划卡会剩不下左栏（标题要断成三行，灰字压到卡片上）。 */}
-      <div className="dashboard-hero grid gap-6 min-[1180px]:grid-cols-[minmax(0,1fr)_minmax(0,380px)] 2xl:grid-cols-[minmax(0,1fr)_minmax(0,430px)]">
+      <div className="dashboard-hero grid gap-6">
       {/* ============ 首屏：左标题 + 右「今日行动计划」（缩小后移到右上角） ============ */}
       {/* 左栏：标题 + 灰字 + 两个动作，整块在左栏内垂直居中（对齐右侧计划卡的高度） */}
       <div className="lg:flex lg:flex-col lg:justify-center" style={{ paddingTop: tune.offset }}>
@@ -384,12 +379,6 @@ export default function Dashboard() {
           </span>
           <span className="text-slate-400"> · {view.date}</span>
         </p>
-        {/* 字号走 .dash-hero-title（见 index.css）。
-            不能写 Tailwind 的 text-*：全局 `h1 { font-size: 1.625rem }` 在 @layer
-            之外，会压过分层的工具类，写了也是死代码（本文件多处已注明）。
-            原来是内联 style={{ fontSize: tune.title }}，tune.title 是调参面板留下的
-            常量 54（as const，无任何响应式逻辑），于是在 390px 手机上也是 54px，
-            撑成两行巨字、占掉近半屏。 */}
         <h1 className="dash-hero-title font-medium leading-[1.14] tracking-[0.25px] text-slate-900" style={{ marginTop: tune.line1Gap }}>
           您最近的状态，都在这里
         </h1>
