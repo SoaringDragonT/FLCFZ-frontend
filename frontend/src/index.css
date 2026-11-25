@@ -1000,13 +1000,16 @@ h3.text-2xl {
     font-size: 1.75rem;
     line-height: 1.25;
   }
-  .auth-snap .auth-screen p {
-    line-height: 1.8;
-  }
   /* 登录屏靠 flex 居中，不需要这层额外留白，否则矮屏会被顶高一屏 */
   .auth-snap #login > div {
     padding-top: 0;
     padding-bottom: 0;
+  }
+}
+
+@media (max-width: 1023px) and (max-height: 760px) {
+  .auth-snap .auth-screen p {
+    line-height: 1.8;
   }
 }
 
@@ -2024,6 +2027,31 @@ html:not(.app-booted) .page-enter {
     margin-top: clamp(1.125rem, 2.8svh, 1.75rem);
     font-size: clamp(1rem, 1.2vw, 1.125rem);
     line-height: 1.8;
+  }
+  .intro-visual {
+    container: chapter / inline-size;
+  }
+  /* 给量表补充说明留出一行，沿用原三列卡片的宽高。 */
+  .intro-scales {
+    margin-top: 0.875rem;
+    padding-top: 0.875rem;
+  }
+  .intro-scales > p:last-child {
+    margin-top: 0.5rem;
+  }
+  /* 侧栏图示随所在列收紧留白，保持三列里的数字、中文标签可读。 */
+  @container chapter (max-width: 41rem) {
+    .intro-panel {
+      padding: clamp(1rem, 4cqi, 1.625rem);
+    }
+    .intro-channel {
+      padding: clamp(0.625rem, 2.75cqi, 1.125rem);
+    }
+    .intro-metric {
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      padding: 0.75rem;
+    }
   }
   .auth-login-grid {
     max-width: 78rem;

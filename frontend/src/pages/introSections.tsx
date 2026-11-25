@@ -71,7 +71,7 @@ export function Section({
           )}
           {footnote && <p className="mt-10 text-[13px] text-slate-500">{footnote}</p>}
         </div>
-        <div data-reveal data-visual>{visual}</div>
+        <div data-reveal data-visual className="intro-visual">{visual}</div>
       </div>
     </section>
   );
@@ -85,7 +85,7 @@ export { Aurora };
 /* 示意图统一外壳：放大内边距，让卡片撑满一屏 */
 function Panel({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="rounded-[30px] border border-slate-200 bg-white p-7 shadow-[0_26px_64px_-44px_rgba(16,24,40,0.5)] sm:p-9">
+    <div className="intro-panel rounded-[30px] border border-slate-200 bg-white p-7 shadow-[0_26px_64px_-44px_rgba(16,24,40,0.5)] sm:p-9">
       <p className="text-[13px] font-medium tracking-[0.18em] text-slate-500">{label}</p>
       <div className="mt-6">{children}</div>
     </div>
@@ -122,7 +122,7 @@ export function TechVisual() {
 
       <div className="mt-6 grid gap-3.5 sm:grid-cols-3">
         {metrics.map((item) => (
-          <div key={item.label} className="flex items-start gap-3.5 rounded-2xl bg-slate-50 p-5">
+          <div key={item.label} className="intro-metric flex items-start gap-3.5 rounded-2xl bg-slate-50 p-5">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white text-primary-500">
               <item.icon className="h-5 w-5" />
             </span>
@@ -186,7 +186,7 @@ export function AssessVisual() {
     <Panel label="三模态 × 多维度">
       <div className="grid gap-4 sm:grid-cols-3">
         {groups.map((group) => (
-          <div key={group.title} className="rounded-2xl border border-slate-100 p-6">
+          <div key={group.title} className="intro-channel rounded-2xl border border-slate-100 p-6">
             <span className={`inline-block rounded-xl px-3.5 py-2 text-[15px] font-semibold ${group.tone}`}>
               {group.title}
             </span>
@@ -205,7 +205,7 @@ export function AssessVisual() {
         ))}
       </div>
 
-      <div className="mt-6 border-t border-dashed border-slate-200 pt-5">
+      <div className="intro-scales mt-6 border-t border-dashed border-slate-200 pt-5">
         <p className="text-[13px] text-slate-500">同时纳入的标准化量表</p>
         <div className="mt-2.5 flex flex-wrap gap-2">
           {dims.map((chip) => (
