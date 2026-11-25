@@ -28,7 +28,6 @@ const BODY_Y0 = 10;
 const BODY_Y1 = 470;
 
 export const BOT_BODY_W = BODY_X1 - BODY_X0;
-export const BOT_BODY_H = BODY_Y1 - BODY_Y0;
 export const BOT_CANVAS_RATIO = VB_W / BOT_BODY_W;
 export const BOT_PAD_LEFT_RATIO = (BODY_X0 - VB_X) / VB_W;
 export const BOT_PAD_TOP_RATIO = (BODY_Y0 - VB_Y) / VB_H;

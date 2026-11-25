@@ -89,15 +89,6 @@ export function getFirstRunState(explicitUsername?: string | null): FirstRunStat
   return readState(resolveUsername(explicitUsername));
 }
 
-/**
- * 登录后要不要先进欢迎页。
- * 只看 guideSeen：跳过的人（new + guideSeen）与中途退出的人（in_progress）
- * 都不该再看到欢迎页。
- */
-export function needsFirstRunGuide(explicitUsername?: string | null): boolean {
-  return !getFirstRunState(explicitUsername).guideSeen;
-}
-
 /** 在欢迎页点了「先进入主页」：记下"看过引导了"，但不代表开始过筛查 */
 export function markGuideSeen(explicitUsername?: string | null): FirstRunState {
   const username = resolveUsername(explicitUsername);
@@ -125,24 +116,6 @@ export function markFirstScreeningDone(
   const username = resolveUsername(explicitUsername);
   const current = readState(username);
   return writeState(username, { ...current, status: 'done', guideSeen: true });
-}
-
-/**
- * 首页空状态用：有没有一份"选了但没提交"的量表。
- * 返回量表 id；没有则返回 null。
- */
-export function getPendingScale(explicitUsername?: string | null): string | null {
-  const state = getFirstRunState(explicitUsername);
-  return state.status === 'in_progress' && state.scaleId ? state.scaleId : null;
-}
-
-/** 演示 / 自测用：把这个账号的引导状态清回全新（界面上没有入口，只在控制台用） */
-export function resetFirstRun(explicitUsername?: string | null): void {
-  try {
-    window.localStorage.removeItem(storageKey(resolveUsername(explicitUsername)));
-  } catch {
-    /* 忽略 */
-  }
 }
 
 /* ==========================================================================

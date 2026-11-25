@@ -1,11 +1,10 @@
 /**
- * mockApi.ts
- * 统一的 API 层：
- * - 当 VITE_USE_MOCK=true：返回本地 mock 数据（用于演示 / 离线开发）
- * - 当 VITE_USE_MOCK=false：走真实后端（见 http.ts）
+ * mockApi.ts —— 个人端接口层（早期单体，仍在服役）
+ * - VITE_USE_MOCK=true：返回本地演示数据；false：走真实后端（见 http.ts）
  *
- * 组件只需要 import 这里的方法，不用关心数据来源。
- * 要接后端只需改环境变量 VITE_USE_MOCK=false，组件无需改动。
+ * ⚠ 划分现状：管理端接口在 adminApi.ts，心理管家在 steward.ts，验证码在 captcha.ts，
+ *   图谱在 kgProfile.ts / localKg.ts。本文件只保留个人端「筛查 / 计划 / 账号 / 首页数据」
+ *   这些既有接口；**新增接口请按领域建文件，不要再往这里加**（详见 frontend/STRUCTURE.md）。
  */
 
 import {

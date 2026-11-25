@@ -51,19 +51,6 @@ function readStoredGender(): string | null {
   }
 }
 
-/**
- * 写入本机性别覆盖（供将来的"个人设置"页调用）。
- * 传 null 表示清除覆盖、回到自动判定。
- */
-export function saveGender(gender: KgGender | null): void {
-  try {
-    if (gender) localStorage.setItem(GENDER_KEY, gender);
-    else localStorage.removeItem(GENDER_KEY);
-  } catch {
-    /* 写不进去也不阻断界面：本次会话仍按兜底渲染 */
-  }
-}
-
 /* ────────────────────────────── 深空色板 ────────────────────────────── */
 
 export interface DeepSpacePalette {

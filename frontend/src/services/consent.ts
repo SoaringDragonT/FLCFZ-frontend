@@ -39,10 +39,6 @@ export async function saveConsentPrompt(promptDisabled: boolean): Promise<Consen
   return cached;
 }
 
-export function peekConsentPrompt(): ConsentPromptPref {
-  return cached ?? FALLBACK;
-}
-
 /* ---------------- 全局询问队列（同一时刻只可能有一个弹窗） ---------------- */
 
 interface ConsentState {

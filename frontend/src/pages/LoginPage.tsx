@@ -176,7 +176,7 @@ export default function LoginPage() {
       saveSessionToken(result.token, rememberMe);
       saveDisplayName(result.name);
       /* 连不上后端时 apiLogin 会用本机演示数据完成登录（result.offline），
-         这里如实说明进入离线演示，工作台顶栏也会挂「离线演示」标记。 */
+         这里如实说明"进入离线演示"，不谎称登录成功。 */
       setMessage(result.offline ? "后端暂时连不上，已进入离线演示模式…" : "登录成功，正在进入系统…");
       /* 直接跳：个人账号首次登录先进欢迎页，判据是引导状态而不是有没有记录 */
       navigate(resolveEntryPath(result.role), { replace: true });

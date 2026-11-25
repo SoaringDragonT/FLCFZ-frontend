@@ -70,13 +70,3 @@ export async function assessRetrieval(input: AssessmentRequest): Promise<Retriev
   if (!data?.assessment) throw new Error('本次筛查评估未返回，请重试');
   return data.assessment;
 }
-
-export function assessmentScaleHref(assessment: RetrievalAssessment, code: string | undefined, query: string): string {
-  const params = new URLSearchParams({ tab: 'scale' });
-  if (code) params.set('paper', code);
-  if (assessment.supplementId) {
-    params.set('assessmentSupplementId', String(assessment.supplementId));
-    params.set('assessmentQuery', query);
-  }
-  return `/personal/screening?${params.toString()}`;
-}

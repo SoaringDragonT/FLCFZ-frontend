@@ -33,7 +33,7 @@ export const STRICT_BACKEND = String(import.meta.env.VITE_STRICT_BACKEND ?? '') 
  *
  * 现在登录层在确认"请求根本没到后端"之后，会调 activateOfflineDemo() 把
  * 这个开关**在运行时**打开，用本机演示数据继续（见 mockApi.apiLogin）。
- * 界面会显示「离线演示」标记，不会假装数据来自后端。
+ * 登录页会用提示条说明"当前是离线演示数据"，不会假装数据来自后端。
  */
 export let USE_MOCK = ENV_MOCK;
 
@@ -46,7 +46,6 @@ export let USE_MOCK = ENV_MOCK;
  */
 export function activateOfflineDemo(): void {
   USE_MOCK = true;
-  notifyOfflineDemo();
 }
 
 /** 当前是否处于"后端连不上而降级到演示数据"的状态（区别于构建期就定的演示包）。 */
@@ -54,29 +53,9 @@ export function isOfflineDemo(): boolean {
   return USE_MOCK && !ENV_MOCK;
 }
 
-/* USE_MOCK 是模块级变量，React 不会因为普通变量变化而重渲染。
-   页面在挂载之后才收到 5xx、切到离线演示时（例如首页数据加载失败），
-   顶栏的「离线演示」标记如果没有订阅机制就不会出现——用户会以为数据还是
-   服务器返回的。这里给 useSyncExternalStore 提供一个最小订阅接口。 */
-const offlineListeners = new Set<() => void>();
-
-export function subscribeOfflineDemo(listener: () => void): () => void {
-  offlineListeners.add(listener);
-  return () => {
-    offlineListeners.delete(listener);
-  };
-}
-
-function notifyOfflineDemo(): void {
-  offlineListeners.forEach((listener) => listener());
-}
-
 /** 退出演示会话后回到"照常尝试真实后端"的状态；构建期演示包不受影响。 */
 export function resetOfflineDemo(): void {
-  if (!ENV_MOCK) {
-    USE_MOCK = false;
-    notifyOfflineDemo();
-  }
+  if (!ENV_MOCK) USE_MOCK = false;
 }
 
 const TOKEN_KEY_PERSISTENT = 'psych_token_persistent';

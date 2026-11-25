@@ -263,17 +263,6 @@ export function projectPoint(p: Vec3, cam: Camera): Projected {
   };
 }
 
-/** 只算深度缩放（不需要屏幕坐标时用，少两次乘法） */
-export function depthScaleOf(p: Vec3, cam: Camera): number {
-  const q = rotatePoint(p, cam.yaw, cam.pitch);
-  return CAM_DIST / (CAM_DIST - q.z);
-}
-
-/** 把一组"深空底纹"的坐标也跟着相机转（大圆经纬线用） */
-export function projectRing(points: Vec3[], cam: Camera): Pos[] {
-  return points.map((p) => projectPoint(p, cam));
-}
-
 /* ───────────────────────────── 球体经纬线 ───────────────────────────── */
 
 /**
@@ -300,12 +289,6 @@ export function buildRings(samples = 72): Vec3[][] {
     }
     return pts;
   });
-}
-
-/** 把点列转成 SVG path（需要填充/描边的曲线用） */
-export function ringPath(screen: Pos[]): string {
-  if (!screen.length) return '';
-  return screen.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
 }
 
 /** 把点列转成 <polyline points="..."> 的字符串（比 path 少一次解析，且更好直接更新） */

@@ -3,9 +3,6 @@ import { request, USE_MOCK } from './http';
 import {
   alertRecords as sampleAlerts,
   caseRecords as sampleCases,
-  trendData as sampleTrend,
-  alertDistribution as sampleDistribution,
-  screeningRecords as sampleScreenings,
   type AlertRecord,
   type CaseRecord,
 } from '../admin/data/adminMockData';
@@ -116,26 +113,6 @@ function params(values: Record<string, string | number | undefined>) {
     if (value !== undefined && value !== '') query.set(key, String(value));
   });
   return query.toString();
-}
-
-export async function getAdminDashboard(): Promise<AdminDashboardData> {
-  if (USE_MOCK) {
-    return {
-      stats: {
-        totalScreenings: sampleScreenings.length,
-        monthlyScreenings: sampleScreenings.length,
-        openAlerts: demoAlerts.filter((a) => a.status === 'pending' || a.status === 'processing').length,
-        completionRate: sampleScreenings.length
-          ? Math.round(sampleScreenings.filter((s) => s.status === 'completed').length / sampleScreenings.length * 100)
-          : 0,
-        seedRecords: sampleScreenings.length,
-      },
-      trendData: sampleTrend,
-      alertDistribution: sampleDistribution,
-      alertRecords: demoAlerts,
-    };
-  }
-  return request.get<AdminDashboardData>('/api/admin/dashboard');
 }
 
 export async function listAdminAlerts(filters: {
