@@ -12,13 +12,19 @@ const defaults: StewardSettings = { enabled: true, screening: true, chat: false,
 const button = 'rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 hover:bg-primary-50 disabled:opacity-50';
 const dateLabel = (value?: string) => !value ? '日期未知' : value.length === 10 ? value : new Date(value).toLocaleDateString('zh-CN', { timeZone:'Asia/Shanghai' });
 
-export default function StewardPanel({ mode = 'summary' }: { mode?: 'summary' | 'settings' | 'profile' | 'actions' | 'records' }) {
+export default function StewardPanel({ mode = 'summary', bare = false, openAll = false }: {
+  mode?: 'summary' | 'settings' | 'profile' | 'actions' | 'records';
+  /* bare：只要内容、不要卡片外壳与底部链接行 —— 由调用方（建议与行动页）提供卡片与入口按钮 */
+  bare?: boolean;
+  /* openAll：详情面板里默认展开「记忆与依据管理 / 筛查历史」，否则面板多半是空的 */
+  openAll?: boolean;
+}) {
   const session = getCurrentSession();
   if (session?.role !== 'user') return null;
-  return <PersonalSteward mode={mode} />;
+  return <PersonalSteward mode={mode} bare={bare} openAll={openAll} />;
 }
 
-function PersonalSteward({ mode }: { mode: string }) {
+function PersonalSteward({ mode, bare, openAll }: { mode: string; bare: boolean; openAll: boolean }) {
   const owner=useRef(getCurrentSession()?.username);
   const { data, error } = useSteward();
   const active = usePageActive();
@@ -65,8 +71,8 @@ function PersonalSteward({ mode }: { mode: string }) {
 
   if (owner.current !== getCurrentSession()?.username) return null;
 
-  return <section className={mode === 'settings' ? 'space-y-4' : 'ui-card space-y-4 p-5'} aria-label={mode === 'settings' ? '心理管家与记忆设置' : '专属心理管家'}>
-    {mode !== 'settings' && <div className="flex flex-wrap items-center justify-between gap-3">
+  return <section className={bare || mode === 'settings' ? 'space-y-4' : 'ui-card space-y-4 p-5'} aria-label={mode === 'settings' ? '心理管家与记忆设置' : '专属心理管家'}>
+    {!bare && mode !== 'settings' && <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h2 className="font-semibold text-slate-900">{detail ? '适合您的心理建议' : mode === 'actions' ? '为您准备的建议与跟进' : '我的专属心理管家'}</h2><p className="mt-1 text-xs text-slate-500">近期状态看近30天；长期特点由您确认。所有理解都可以纠正。</p></div>
       {enabled && <button className={button} disabled={busy} onClick={() => void run(() => stewardApi.refresh(), '已加入后台更新队列')}>更新分析</button>}
     </div>}
@@ -100,7 +106,7 @@ function PersonalSteward({ mode }: { mode: string }) {
         {correction?.id.startsWith('suggestion:') && <div className="flex flex-wrap gap-2"><input aria-label="调整行动标题" className="rounded-xl border p-2" value={correction.text} onChange={e => setCorrection({...correction,text:e.target.value})} /><button className={button} disabled={busy || !correction.text.trim()} onClick={() => void run(async () => { await stewardApi.suggestion(correction.id.slice(11),'accept',correction.text); setCorrection(null); })}>按此标题加入计划</button></div>}
         {mode === 'actions' && !data.suggestions.length && <p className="text-sm text-slate-500">积累足够记录后，管家会给出有依据的建议。您也可以先在首页添加自己的小计划。</p>}
       </div>}
-      {detail && <details className="rounded-xl border border-slate-100 p-3"><summary className="cursor-pointer text-sm font-medium text-slate-600">记忆与依据管理</summary><div className="mt-4 space-y-4">{points('变化与需要核实的差异', data.snapshot.changes)}{points('想进一步了解您', data.snapshot.questions)}
+      {detail && <details className="rounded-xl border border-slate-100 p-3" open={openAll}><summary className="cursor-pointer text-sm font-medium text-slate-600">记忆与依据管理</summary><div className="mt-4 space-y-4">{points('变化与需要核实的差异', data.snapshot.changes)}{points('想进一步了解您', data.snapshot.questions)}
         <div className="space-y-3"><h3 className="font-medium">我的特点与记忆</h3><p className="text-xs text-slate-500">待确认内容只是AI的初步理解；“符合我”后才作为长期认识使用。</p>
           {data.memories.map(m => <article key={m.id} className="space-y-2 rounded-xl border border-slate-100 p-3"><p className="text-sm">{m.content}</p><div className="flex flex-wrap items-center gap-3 text-xs"><span>{m.status === 'confirmed' ? '本人已确认' : '待本人确认'}</span><button className="text-primary-600" onClick={() => reveal(m.evidence_ids)}>依据</button>{m.status !== 'confirmed' && <button disabled={busy} onClick={() => void run(() => stewardApi.memory(m.id, 'confirm'))}>符合我</button>}<button onClick={() => setCorrection({ id: m.id, text: m.content })}>纠正</button><button disabled={busy} onClick={() => void run(() => stewardApi.memory(m.id, 'forget'), '已忘记，并排除相关来源记录；原始筛查保留。')}>忘记并排除来源</button></div></article>)}
           {correction && !correction.id.startsWith('suggestion:') && <div className="space-y-2"><textarea aria-label="纠正记忆" className="w-full rounded-xl border p-3 text-sm" value={correction.text} onChange={e => setCorrection({ ...correction, text: e.target.value })} /><p className="text-xs text-slate-500">错误认识及其来源将退出管家分析，原始记录不会删除。</p><button className={button} disabled={busy || !correction.text.trim()} onClick={() => void run(async () => { await stewardApi.memory(correction.id, 'correct', correction.text); setCorrection(null); })}>保存纠正</button><button className={`${button} ml-2`} onClick={() => setCorrection(null)}>取消</button></div>}
@@ -109,7 +115,7 @@ function PersonalSteward({ mode }: { mode: string }) {
         </div>
       </div></details>}
       {(mode === 'records' || detail) && <ScreeningHistory series={data.series} media={data.multimodal_history} open={mode === 'records'} onEvidence={reveal} />}
-      <div className="flex flex-wrap gap-4 text-sm text-primary-600"><Link to="/personal/me/kg">查看心理档案</Link><Link to="/personal/me/feed">建议与行动</Link><button onClick={() => { setDraft(null); setEditing(!editing); }}>记忆设置</button><button onClick={() => { setSelected([]); setShowEvidence(!showEvidence); }}>{showEvidence ? '收起依据' : '查看记录依据'}</button></div>
+      {!bare && <div className="flex flex-wrap gap-4 text-sm text-primary-600"><Link to="/personal/me/kg">查看心理档案</Link><Link to="/personal/me/feed">建议与行动</Link><button onClick={() => { setDraft(null); setEditing(!editing); }}>记忆设置</button><button onClick={() => { setSelected([]); setShowEvidence(!showEvidence); }}>{showEvidence ? '收起依据' : '查看记录依据'}</button></div>}
       {showEvidence && <div className="max-h-96 space-y-3 overflow-auto rounded-xl bg-slate-50 p-3"><h3 className="font-medium">本人记录依据</h3>{!evidence.length && <p className="text-sm text-slate-500">暂无获准使用的记录。</p>}{evidence.filter(e => !selected.length || selected.includes(e.id)).map(e => <article key={e.id} className="rounded-xl bg-white p-3"><p className="text-xs text-slate-400">{sourceNames[e.source] ?? e.source} · {dateLabel(e.occurred_at)}</p><p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-700">{e.body}</p><button className="mt-2 text-xs text-primary-600" disabled={busy} onClick={() => void run(() => stewardApi.forget(e.id), '已从管家中排除此来源，原始记录保留。')}>不再用于管家分析</button></article>)}{hasMore && <button className={button} onClick={() => void run(async () => { const more = await stewardApi.evidence(evidence.length); setEvidence(prev => [...prev,...more]); setHasMore(more.length === 50); }, '')}>加载更多依据</button>}</div>}
     </>}
   </section>;

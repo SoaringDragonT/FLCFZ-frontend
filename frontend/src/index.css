@@ -482,6 +482,27 @@ html.theme-switching *::after {
   /* AI 陪伴对话页：整页撑满"视口 - 顶栏(h-16)"，输入框贴底，
      和主流大模型对话软件一致。只对带 .chat-fullheight 的页面生效，
      其余页面保持普通文档流。 */
+  /* 建议与行动：桌面端左右两栏等高，并撑满「视口 − 顶栏 − 页面标题」的剩余高度。
+     两张卡的高度由视口决定，内容增减只在卡片内部滚动，不会把方框撑高或缩水。 */
+  @media (min-width: 1280px) {
+    .app-content:has(.feed-split) {
+      display: flex;
+      flex-direction: column;
+      height: calc(100dvh - var(--topbar-height, 4rem));
+    }
+    .app-content:has(.feed-split) .page-body,
+    .app-content:has(.feed-split) .page-body > div {
+      display: flex;
+      flex: 1 1 auto;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .app-content:has(.feed-split) .feed-split {
+      flex: 1 1 auto;
+      min-height: 0;
+    }
+  }
+
   .app-content:has(.workspace-view[data-workspace-active="true"] > .chat-fullheight) {
     display: flex;
     flex-direction: column;
