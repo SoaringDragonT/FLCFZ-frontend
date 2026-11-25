@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useTheme } from "../hooks/useTheme";
+import { useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { navigateWithTransition } from "../utils/viewTransition";
 import { readDemoPreset } from "../demoPreset";
@@ -22,13 +23,7 @@ import { saveDisplayName, saveSessionToken } from "../auth/session";
 import { resolveEntryPath } from "../auth/entryPath";
 
 type AuthTab = "login" | "register";
-type Theme = "light" | "dark";
 type Panel = "user" | "admin";
-
-const THEME_KEY = "psych_theme";
-
-const readStoredTheme = (): Theme =>
-  window.localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light";
 
 /* HashRouter 下查询参数在 hash 里（#/login?panel=admin），
    必须用 router 的 location.search 读取，window.location.search 取不到。 */
@@ -43,7 +38,7 @@ export default function LoginPage() {
   const initialPanel = readPanel(search);
   const [tab, setTab] = useState<AuthTab>("login");
   const [panel, setPanel] = useState<Panel>(initialPanel);
-  const [theme, setTheme] = useState<Theme>(readStoredTheme);
+  const { theme, toggleTheme } = useTheme();
   /* 演示包（手机版）会预填演示账号：手机上打两遍账号密码很烦，
      而演示现场常是"把手机递给别人看"。没有预设时初值仍是空串。 */
   const preset = readDemoPreset().prefill ?? {};
@@ -57,34 +52,11 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-
   /* 这里刻意**不做**"已登录就直接放行"：打开登录页永远当作没登录过，
      输入框留空、正常走一次登录。否则点顶栏「登录」会被瞬间送进系统，
      连表单都看不到（用户明确要求过）。
      "记住我"仍然保留：勾了之后 token 存在 localStorage，直接访问工作台地址
      依旧是登录状态，不用重新输。 */
-
-  useEffect(() => {
-    const dark = theme === "dark";
-    document.documentElement.classList.toggle("dark", dark);
-    document.documentElement.style.colorScheme = dark ? "dark" : "light";
-    document
-      .querySelector('meta[name="theme-color"]')
-      ?.setAttribute("content", dark ? "#0b1120" : "#465fff");
-    try {
-      window.localStorage.setItem(THEME_KEY, theme);
-    } catch {
-      /* 隐私模式下 localStorage 不可写时忽略 */
-    }
-  }, [theme]);
-
-
-  const toggleTheme = () => {
-    const root = document.documentElement;
-    root.classList.add("theme-switching");
-    window.setTimeout(() => root.classList.remove("theme-switching"), 260);
-    setTheme(theme === "dark" ? "light" : "dark");
-  };
 
   const getPasswordStrength = (
     value: string,
